@@ -8,12 +8,16 @@ const walletSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['trade', 'hot', 'cold'],
-    required: true
+    enum: ['trade', 'hot', 'cold'], // Make sure this is not mandatory in the case of fiat wallets
+    required: false // Make it optional
   },
   cryptoAddress: {
     type: String,
-    required: true
+    required: false // Make it optional
+  },
+  accountNumber: {
+    type: String,
+    required: false // Add this for fiat wallets
   },
   balance: {
     type: Number,

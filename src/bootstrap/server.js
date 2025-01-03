@@ -11,6 +11,8 @@ import orderRoutes from '../routes/orderRoutes.js';
 import stockRoutes from '../routes/stockRoutes.js';
 import supportRoutes from '../routes/supportRoutes.js';
 import walletRoutes from '../routes/walletRoutes.js';
+import utilityRoutes from '../routes/utilityRoutes.js';
+import accountAggregationRoutes from '../routes/accountAggregationRoutes.js';
 
 import connectDB from '../lib/config/db.js';
 
@@ -31,14 +33,16 @@ connectDB();
 
 // Import Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/barter', barterRoutes);
-app.use('/api/crypto', cryptoTransactionRoutes);
+app.use('/api', barterRoutes);
+app.use('/api', cryptoTransactionRoutes);
 app.use('/api/forex', forexTransactionRoutes);
 app.use('/api/investment', investmentRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/stocks', stockRoutes);
 app.use('/api/support', supportRoutes);
 app.use('/api/wallet', walletRoutes);
+app.use('/api/utility', utilityRoutes);
+app.use('/api', accountAggregationRoutes);
 
 // 404 handler for unmatched routes
 app.use((req, res, next) => {

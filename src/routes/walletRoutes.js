@@ -1,19 +1,22 @@
+// routes/walletRoutes.js
 import express from 'express';
-import { createWallet, regenerateWalletAddress, getWalletsByUser, getWalletById } from '../app/controllers/walletController.js';
-import { authenticateUser } from '../app/middleware/authMiddleware.js';
+import { createWallet, regenerateWalletAddress, getAllWallets, getWalletById, fundWallet,getWalletBalance } from '../app/controllers/walletController.js';
+import verifyTokenMiddleware from '../app/middleware/verifyTokenMiddleware.js';
 
 const router = express.Router();
 
-// Create a new wallet
-router.post('/wallet', authenticateUser, createWallet);
 
-// Regenerate wallet address
-router.patch('/wallet/:walletId/regenerate', authenticateUser, regenerateWalletAddress);
+router.post('/create', verifyTokenMiddleware, createWallet);
 
-// Get all wallets for a user
-router.get('/wallets/:userId', authenticateUser, getWalletsByUser);
+router.patch('/:walletId/regenerate', verifyTokenMiddleware, regenerateWalletAddress);
 
-// Get a specific wallet by wallet ID
-router.get('/wallet/:walletId', authenticateUser, getWalletById);
+router.get('/', verifyTokenMiddleware, getAllWallets);
+
+router.get('/:walletId', verifyTokenMiddleware, getWalletById);
+
+router.post('/:walletId/fund', verifyTokenMiddleware, fundWallet);
+
+router.get('/:walletId/balance', verifyTokenMiddleware, getWalletBalance);
+
 
 export default router;

@@ -1,0 +1,36 @@
+
+
+
+
+*.log
+logs/**/*.log
+
+.env
+.env.local
+.env.*.local
+
+dist/
+build/
+coverage/
+
+# IDE Files
+.vscode/
+.idea/
+.DS_Store
+
+
+Thumbs.db
+.DS_Store
+
+# Debugging
+*.swp
+*.swo
+
+# Optional npm cache directory
+.npm/
+
+# TypeScript
+*.tsbuildinfo
+
+# Miscellaneous
+*.lock

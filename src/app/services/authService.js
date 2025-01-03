@@ -2,124 +2,167 @@ import User from '../models/User.js';
 import bcrypt from 'bcrypt';
 import { generateToken } from '../../lib/utils/jwtUtils.js';
 import { sendOtp } from '../../lib/utils/otpUtils.js';
+import twilio from 'twilio';
 
-// Signup
+// Twilio configuration
+const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+const serviceId = process.env.TWILIO_VERIFY_SERVICE_SID;
+
+
+// Your existing signup function
 const signup = async (userData) => {
     const { fullName, email, phoneNumber, password, role } = userData;
 
     try {
-        // Validate password input
+        // Validate inputs
         if (!password || typeof password !== 'string') {
             throw new Error('Invalid password provided');
         }
-
-        // Check if the user already exists
-        const existingUser = await User.findOne({ email });
-        if (existingUser) {
-            throw new Error('User already exists');
+        if (!phoneNumber || !email) {
+            throw new Error('Phone number and email are required');
         }
 
-        // Hash the password securely
+        // Check if user already exists
+        const existingUser = await User.findOne({ $or: [{ email }, { phoneNumber }] });
+        if (existingUser) {
+            throw new Error('User with provided email or phone number already exists');
+        }
+
+        // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Generate a 6-digit OTP and set an expiration time
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-        const otpExpiry = new Date(Date.now() + 10 * 60000); // Current time + 10 minutes
-
-        // Create a new user instance
+        // Create user instance
         const user = new User({
             fullName,
             email,
             phoneNumber,
             password: hashedPassword,
-            role: role || 'user',
-            otp,
-            otpExpiry,
+            role: role || 'user', // Default to 'user' if no role is provided
+            isVerified: false,
         });
 
-        // Save the user to the database
+        // Save user
         await user.save();
 
-        // Send OTP via your OTP service
-        await sendOtp(phoneNumber, otp);
+        // Send OTP via Twilio
+        await client.verify.services(serviceId).verifications.create({
+            to: `+${phoneNumber}`,
+            channel: 'sms',
+        });
 
-        // Return a success message and user ID
-        return { message: 'OTP sent successfully', userId: user._id };
+        return {
+            message: 'Registration successful. OTP sent to your phone number.',
+            userId: user._id,
+        };
     } catch (error) {
-        console.error('Signup failed:', error.message);
+        console.error('Signup error:', error.message);
         throw new Error(`Signup failed: ${error.message}`);
     }
 };
 
-// Login
-const login = async (email, password) => {
+
+// Verify OTP - Confirms the OTP and verifies the user
+const verifyOtp = async (userId, otp) => {
     try {
-        // Find user by email
-        const user = await User.findOne({ email });
-        
-        // Check if user exists and is verified
+        const user = await User.findById(userId);
+
         if (!user) {
             throw new Error('User not found');
         }
-        
-        if (!user.isVerified) {
-            throw new Error('User not verified');
+
+        // Verify OTP with Twilio
+        const verificationCheck = await client.verify.services(serviceId)
+            .verificationChecks.create({ to: `+${user.phoneNumber}`, code: otp });
+
+        if (!verificationCheck.valid) {
+            throw new Error('Invalid OTP');
         }
 
-        // Check if password matches
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
+        // Generate auth token
+        const token = generateToken({ id: user._id, role: user.role });
+
+        return { message: 'Login verified successfully', token };
+    } catch (error) {
+        console.error('Login OTP verification error:', error.message);
+        throw new Error(`Verification failed: ${error.message}`);
+    }
+};
+
+// Login - Authenticates user by email/phone and password
+const login = async (credentials) => {
+    const { email, phoneNumber, password } = credentials;
+
+    try {
+        const user = await User.findOne({ $or: [{ email }, { phoneNumber }] });
+
+        if (!user) {
+            throw new Error('User not found');
+        }
+        if (!user.isVerified) {
+            throw new Error('User is not verified');
+        }
+
+        // Verify password
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
             throw new Error('Invalid credentials');
         }
 
-        // Generate JWT token
-        const token = generateToken({ id: user._id, role: user.role });
+        // Send OTP via Twilio for verification after login
+        await client.verify.services(serviceId).verifications.create({
+            to: `+${user.phoneNumber}`,
+            channel: 'sms',
+        });
 
-        // Return success message and token
-        return { message: 'Login successful', token };
+        return { message: 'Login successful. OTP sent for verification.', userId: user._id };
     } catch (error) {
-        // Log error for debugging (optional)
         console.error('Login error:', error.message);
-
-        // Return specific error messages
-        if (error.message === 'User not found') {
-            throw new Error('No user found with this email.');
-        }
-        
-        if (error.message === 'User not verified') {
-            throw new Error('Please verify your email before logging in.');
-        }
-
-        if (error.message === 'Invalid credentials') {
-            throw new Error('Incorrect password. Please try again.');
-        }
-
-        // Catch any other unexpected errors
-        throw new Error('An unexpected error occurred during login.');
+        throw new Error(error.message);
     }
 };
 
 // Get User by ID
 const getUserById = async (id) => {
-    return await User.findById(id).select('-password');
+    try {
+        const user = await User.findById(id).select('-password');
+        if (!user) throw new Error('User not found');
+        return user;
+    } catch (error) {
+        console.error('Get user error:', error.message);
+        throw new Error(error.message);
+    }
 };
 
 // Update User
 const updateUser = async (id, updateData) => {
-    const user = await User.findById(id);
-    if (!user) throw new Error('User not found');
+    try {
+        const user = await User.findById(id);
+        if (!user) throw new Error('User not found');
 
-    Object.assign(user, updateData);
-    await user.save();
+        Object.assign(user, updateData);
+        await user.save();
 
-    return { message: 'User updated successfully', user };
+        return { message: 'User updated successfully', user };
+    } catch (error) {
+        console.error('Update user error:', error.message);
+        throw new Error(error.message);
+    }
 };
+
+
+
+
 
 // Delete User
 const deleteUser = async (id) => {
-    const user = await User.findByIdAndDelete(id);
-    if (!user) throw new Error('User not found');
-    return { message: 'User deleted successfully' };
+    try {
+        const user = await User.findByIdAndDelete(id);
+        if (!user) throw new Error('User not found');
+        return { message: 'User deleted successfully' };
+    } catch (error) {
+        console.error('Delete user error:', error.message);
+        throw new Error(error.message);
+    }
 };
 
-export { signup, login, getUserById, updateUser, deleteUser };
+export { signup, verifyOtp, login, getUserById, updateUser, deleteUser };
