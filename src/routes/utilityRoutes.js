@@ -7,7 +7,7 @@ import {
   getPaymentHistory,
   getUtilityById,
   verifyOtpAndProcessPayment
-} from '../app/controllers/utilityPaymentController.js';
+} from '../app/controllers/utilityPaymentController.js'; 
 import verifyTokenMiddleware from '../app/middleware/verifyTokenMiddleware.js';
 
 const router = express.Router();
