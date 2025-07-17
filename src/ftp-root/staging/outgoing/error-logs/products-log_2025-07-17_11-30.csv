@@ -1,0 +1,3 @@
+sku,status,error
+N/A,error,"Missing required fields: {""ORDER_ID"":""6877f79cdad0deea78fa2171"",""SKU"":""FIXED-0a7615"",""QTY_FULFILLED"":""2"",""STATUS"":""fulfilled"",""MESSAGE"":""Shipped successfully""}"
+N/A,error,"Missing required fields: {""ORDER_ID"":""6877f79cdad0deea78fa2171"",""SKU"":""FIXED-0a9999"",""QTY_FULFILLED"":""0"",""STATUS"":""failed"",""MESSAGE"":""Out of stock""}"

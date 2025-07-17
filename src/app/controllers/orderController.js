@@ -1,106 +1,101 @@
-import Order from '../models/Order.js';
-import User from '../models/User.js';
-//import Item from '../models/Item.js';
+import * as OrderService from '../services/orderService.js';
 
-// Create a new order
-export const createOrder = async (req, res) => {
-  const { userId, orderType, items, shippingAddress } = req.body;
-
+export async function createOrder(req, res) {
   try {
-    // Verify if the user exists
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    const { items, shippingAddress, billingAddress, paymentMethod } = req.body;
+    const role = req.user?.role || 'user';
+    const userId = req.user?.id;
 
-    // Calculate total amount for the order
-    let totalAmount = 0;
-    for (const item of items) {
-      const product = await Item.findById(item.itemId);
-      if (!product) return res.status(404).json({ message: 'Item not found' });
-      totalAmount += product.price * item.quantity;
+    if (!items?.length) {
+      return res.status(400).json({ success: false, message: 'Order items are required.' });
     }
 
-    // Create a new order
-    const newOrder = new Order({
-      user: userId,
-      orderType,
+    const order = await OrderService.createOrder({
+      userId,
+      role,
       items,
-      totalAmount,
       shippingAddress,
-      orderStatus: 'pending',
-      paymentStatus: 'pending'
+      billingAddress,
+      paymentMethod,
     });
 
-    await newOrder.save();
-
-    res.status(201).json({ message: 'Order created successfully', order: newOrder });
+    res.status(201).json({ success: true, order });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'An error occurred while creating the order' });
+    console.error('Create order failed:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
-};
+}
 
-// Fetch orders by user
-export const getOrdersByUser = async (req, res) => {
-  const { userId } = req.params;
-
+export async function getOrders(req, res) {
   try {
-    const orders = await Order.find({ user: userId });
-    if (!orders || orders.length === 0) {
-      return res.status(404).json({ message: 'No orders found for this user' });
+    const { page = 1, limit = 20, ...filters } = req.query;
+    const role = req.user?.role || 'user';
+    const userId = req.user?.id;
+
+    const orders = await OrderService.getOrders({
+      userId,
+      role,
+      filters,
+      page: parseInt(page),
+      limit: parseInt(limit),
+    });
+
+    res.status(200).json({ success: true, orders });
+  } catch (error) {
+    console.error('Get orders failed:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+}
+
+export async function getOrderDetails(req, res) {
+  try {
+    const { id } = req.params;
+    const order = await OrderService.getOrderDetails(id);
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found.' });
     }
 
-    res.status(200).json({ orders });
+    res.status(200).json({ success: true, order });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error fetching orders for user' });
+    console.error('Get order details failed:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
-};
+}
 
-// Admin route to get all orders
-export const getAllOrders = async (req, res) => {
+export async function updateOrderStatus(req, res) {
   try {
-    const orders = await Order.find();
-    res.status(200).json({ orders });
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const updated = await OrderService.updateOrderStatus(id, status);
+    res.status(200).json({ success: true, order: updated });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error fetching all orders' });
+    console.error('Update order status failed:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
-};
+}
 
-// Update order status
-export const updateOrderStatus = async (req, res) => {
-  const { orderId } = req.params;
-  const { orderStatus, paymentStatus } = req.body;
-
+export async function deleteOrder(req, res) {
   try {
-    const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    const { id } = req.params;
 
-    order.orderStatus = orderStatus || order.orderStatus;
-    order.paymentStatus = paymentStatus || order.paymentStatus;
-    order.updatedAt = Date.now();
-
-    await order.save();
-
-    res.status(200).json({ message: 'Order status updated successfully', order });
+    await OrderService.deleteOrder(id);
+    res.status(200).json({ success: true, message: 'Order deleted' });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error updating order status' });
+    console.error('Delete order failed:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
-};
+}
 
-// Delete order (admin only)
-export const deleteOrder = async (req, res) => {
-  const { orderId } = req.params;
-
+export async function resendOrderDocuments(req, res) {
   try {
-    const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ message: 'Order not found' });
+    const { id } = req.params;
 
-    await order.remove();
-    res.status(200).json({ message: 'Order deleted successfully' });
+    await OrderService.resendOrderDocuments(id);
+    res.status(200).json({ success: true, message: 'Invoice and receipt re-sent.' });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Error deleting order' });
+    console.error('Resend documents failed:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
   }
-};
+}

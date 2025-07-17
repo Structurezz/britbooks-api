@@ -1,0 +1,4 @@
+sku,status,error
+SKU123,success,
+SKU456,error,DB ERROR: MarketplaceListing validation failed: condition: `fair` is not a valid enum value for path `condition`.
+SKU789,error,"Missing required fields: {""product_id"":""SKU789"",""title"":""Broken Row"",""author"":"""",""price"":"""",""condition"":""""}"

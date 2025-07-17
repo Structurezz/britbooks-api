@@ -1,0 +1,3 @@
+sku,status,error
+ABC123,success,
+XYZ999,error,Missing price field

@@ -1,0 +1,3 @@
+sku,status,error
+N/A,error,"Missing required fields: {""sku"":""ABC123"",""status"":""success"",""error"":""""}"
+N/A,error,"Missing required fields: {""sku"":""XYZ999"",""status"":""error"",""error"":""Missing price field""}"

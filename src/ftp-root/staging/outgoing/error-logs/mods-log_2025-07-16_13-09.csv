@@ -1,0 +1,4 @@
+sku,status,error
+SKU123,success,
+SKU456,error,Listing with SKU SKU456 not found.
+MISSING_SKU,error,"Invalid inventory update row: {""sku"":""MISSING_SKU"",""price"":null,""quantity"":5}"

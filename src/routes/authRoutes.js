@@ -19,6 +19,6 @@ router.post('/verify', verifyOtp);
 router.get('/users', verifyTokenMiddleware, getAllUsers); 
 router.get('/user/:id', verifyTokenMiddleware, getUser);  
 router.put('/user/:id', verifyTokenMiddleware, updateUserProfile);
-router.delete('/user/:id', authenticate, authorize(['admin']), deleteUserAccount);
+router.delete('/user/:id', verifyTokenMiddleware, deleteUserAccount);
 
 export default router;
