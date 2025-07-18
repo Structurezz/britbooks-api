@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 import IORedis from 'ioredis';
 
 import mongoose from 'mongoose';
-import { MarketplaceListing } from '../../app/models/Marketplace.js';
+import { MarketplaceListing } from '../../app/models/MarketPlace.js';
 import { openai } from './openAi.js';
 import { fetchCoverImageUrl } from '../utils/fetchCoverImageUrl.js';
 
