@@ -6,7 +6,7 @@ import dayjs from 'dayjs';
 import {
   upsertListingFromInventory,
   updateInventoryFields,
-} from '../../../app/services/marketplaceService.js';
+} from '../../../app/services/marketPlaceService.js';
 
 const LOG_PATH = path.resolve('./src/ftp-root/staging/outgoing/error-logs');
 fs.mkdirSync(LOG_PATH, { recursive: true });
