@@ -5,6 +5,7 @@ import { Order } from '../../app/models/Order.js';
 import { MarketplaceListing } from '../../app/models/MarketPlace.js';
 import { INVENTORY_DIR } from '../constants/paths.js';
 import { logSyncError } from './logSyncError.js';
+
 export async function parseOrderResponseCSV(filePath) {
   return new Promise((resolve, reject) => {
     const rows = [];
@@ -39,6 +40,14 @@ export async function parseOrderResponseCSV(filePath) {
             const listing = await MarketplaceListing.findOne({ sku });
             if (!listing) {
               console.warn(`⚠️ Listing not found for SKU: ${sku}`);
+
+              await logSyncError({
+                context: 'OrderResponseParsing',
+                order_id,
+                sku,
+                reason: 'Listing not found for SKU',
+              });
+
               continue;
             }
             console.log(`✅ Found listing: ${listing._id} with quantity: ${listing.quantity}`);
@@ -50,7 +59,7 @@ export async function parseOrderResponseCSV(filePath) {
               console.log(`✅ Marked order ${order_id} as shipped in DB`);
 
               const beforeQty = listing.quantity;
-              listing.quantity = Math.max(0, beforeQty - parseInt(shipped_qty));
+              listing.quantity = Math.max(0, beforeQty - (parseInt(shipped_qty) || 0));
               await listing.save();
               console.log(`📦 Updated quantity for SKU ${sku}: ${beforeQty} → ${listing.quantity}`);
             } else {
@@ -60,14 +69,6 @@ export async function parseOrderResponseCSV(filePath) {
             console.error(`❌ Error processing row for order ${order_id}: ${err.message}`);
           }
         }
-
-        // If listing not found:
-await logSyncError({
-    context: 'OrderResponseParsing',
-    order_id,
-    sku,
-    reason: 'Listing not found for SKU',
-  });
 
         // Move file to processed dir
         const processedDir = path.join(INVENTORY_DIR, 'processed');
