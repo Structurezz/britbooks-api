@@ -1,7 +1,8 @@
 {
-  "name": "finance-api",
+  "name": "britbooks-api",
   "version": "1.0.0",
-  "main": "main.js",
+  "main": "src/main.js",
+
   "type": "module",
   "scripts": {
     "start": "node src/main.js",
