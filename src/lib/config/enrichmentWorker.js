@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import IORedis from 'ioredis';
-import { Worker } from 'bullmq';
+
 import mongoose from 'mongoose';
 import { MarketplaceListing } from '../../app/models/Marketplace.js';
 import { openai } from './openAi.js';
@@ -151,6 +151,7 @@ async function enrichListing(listing) {
     console.error(`❌ Enrichment failed for listing ${listing._id}:`, err.message);
   }
 }
+const { Worker } = await import('bullmq');
 
 const worker = new Worker(
   'enrichmentQueue',
