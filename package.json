@@ -15,7 +15,7 @@
   "license": "ISC",
   "description": "API for managing wallets and payments, supporting both fiat and cryptocurrency transactions. This API provides features for wallet creation, balance management, transaction handling, and integration with external payment gateways.",
   "dependencies": {
-    "@fast-csv/format": "^4.3.5",
+    "@fast-csv/format": "^5.0.2",
     "@fast-csv/parse": "^5.0.2",
     "axios": "^1.10.0",
     "basic-ftp": "^5.0.5",
@@ -31,6 +31,7 @@
     "dotenv": "^16.5.0",
     "ethers": "^6.13.4",
     "express": "^4.21.1",
+    "fast-csv": "^4.3.6",
     "ftp-srv": "^4.6.3",
     "install": "^0.13.0",
     "ioredis": "^5.6.1",
