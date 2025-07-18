@@ -16,7 +16,7 @@
   "description": "API for managing wallets and payments, supporting both fiat and cryptocurrency transactions. This API provides features for wallet creation, balance management, transaction handling, and integration with external payment gateways.",
   "dependencies": {
     "@fast-csv/format": "^5.0.2",
-    "@fast-csv/parse": "^5.0.2",
+   
     "axios": "^1.10.0",
     "basic-ftp": "^5.0.5",
     "bcrypt": "^5.1.1",
@@ -31,7 +31,7 @@
     "dotenv": "^16.5.0",
     "ethers": "^6.13.4",
     "express": "^4.21.1",
-    "fast-csv": "^4.3.6",
+    "fast-csv": "^5.0.2",
     "ftp-srv": "^4.6.3",
     "install": "^0.13.0",
     "ioredis": "^5.6.1",
@@ -53,5 +53,8 @@
     "twilio": "^5.3.6",
     "url": "^0.11.4",
     "whatwg-url": "^14.0.0"
+  },
+  "devDependencies": {
+    "npm-force-resolutions": "^0.0.10"
   }
 }
