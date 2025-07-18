@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import dayjs from 'dayjs';
 import mongoose from 'mongoose';
-import { writeToStream } from '@fast-csv/format';
+
 import { fileURLToPath } from 'url';
 import { Order } from '../../app/models/Order.js';
 import { MarketplaceListing } from '../../app/models/Marketplace.js';
@@ -17,6 +17,7 @@ fs.mkdirSync(EXPORT_DIR, { recursive: true });
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/britbook';
 
 export async function generateOrderExport() {
+  const { writeToStream } = await import('@fast-csv/format');
   console.log('✅ Connecting to MongoDB...');
   await mongoose.connect(MONGODB_URI);
   console.log('✅ Connected to MongoDB');
