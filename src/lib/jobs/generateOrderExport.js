@@ -2,10 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import dayjs from 'dayjs';
 import mongoose from 'mongoose';
-
 import { fileURLToPath } from 'url';
 import { Order } from '../../app/models/Order.js';
-import { MarketplaceListing } from '../../app/models/Marketplace.js';
+
 import dotenv from 'dotenv';
 
 dotenv.config();
