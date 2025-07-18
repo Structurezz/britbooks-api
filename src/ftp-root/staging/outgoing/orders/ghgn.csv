@@ -1,3 +1,0 @@
-ORDER_ID,SKU,QTY_FULFILLED,STATUS,MESSAGE
-6877f79cdad0deea78fa2171,FIXED-0a7615,2,fulfilled,"Shipped successfully"
-6877f79cdad0deea78fa2171,FIXED-0a9999,0,failed,"Out of stock"
