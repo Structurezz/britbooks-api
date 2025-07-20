@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import csv from 'csv-parser';
-import { writeToStream } from '@fast-csv/format';
+import { format } from 'fast-csv';
 import dayjs from 'dayjs';
 import {
   upsertListingFromInventory,
@@ -114,7 +114,7 @@ async function writeCsvLog(type, rows) {
     `${type}-log_${dayjs().format('YYYY-MM-DD_HH-mm')}.csv`
   );
   const writeStream = fs.createWriteStream(logFilePath);
-  writeToStream(writeStream, rows, { headers: true });
+  format.writeToStream(writeStream, rows, { headers: true }); // Use format.writeToStream
 }
 
 export { processCsvFile, processInventoryMods };
