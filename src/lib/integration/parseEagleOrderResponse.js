@@ -13,7 +13,8 @@ export async function parseOrderResponseCSV(filePath) {
     console.log(`🚀 Starting to parse Eagle order response CSV: ${filePath}`);
 
     fs.createReadStream(filePath)
-      .pipe(csv.parse({ headers: true }))
+    .pipe(parse({ headers: true }))
+
       .on('error', (error) => {
         console.error(`❌ CSV Parse Error: ${error.message}`);
         reject(error);
