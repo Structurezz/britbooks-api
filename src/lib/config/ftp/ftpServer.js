@@ -9,11 +9,11 @@ const __dirname = dirname(__filename);
 
 const FTP_ROOT = resolve(__dirname, '../../../ftp-root');
 
-const ftpServer = new FTP({
-  url: 'ftp://0.0.0.0:2121',
+const ftpServer = new FTP('ftp://0.0.0.0:2121', {
   anonymous: false,
   greeting: ['📚 Welcome to BritBooks FTP Server!'],
 });
+
 
 ftpServer.on('login', ({ username, password }, resolve, reject) => {
   const VALID_USER = 'eagle';
