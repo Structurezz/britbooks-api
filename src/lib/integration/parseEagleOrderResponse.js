@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { parse } from '@fast-csv/parse';
+import { parse } from 'csv-parse';
 import { Order } from '../../app/models/Order.js';
 import { MarketplaceListing } from '../../app/models/MarketPlace.js';
 import { INVENTORY_DIR } from '../constants/paths.js';
