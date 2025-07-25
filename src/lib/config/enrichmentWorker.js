@@ -139,8 +139,11 @@ Respond in strict JSON format:
 // BeeQueue worker setup
 const enrichmentQueue = new BeeQueue('enrichmentQueue', {
   isWorker: true,
-  redis: connection,
+  redis: {
+    url: process.env.REDIS_URL,
+  },
 });
+
 
 
 enrichmentQueue.process(async (job, done) => {
