@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { Order } from '../../app/models/Order.js';
 import dotenv from 'dotenv';
 import { stringify } from 'csv-stringify/sync';
+import {MarketplaceListing} from '../../app/models/MarketPlace.js';
 
 dotenv.config();
 
