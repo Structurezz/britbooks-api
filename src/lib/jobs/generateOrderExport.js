@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
 import { fileURLToPath } from 'url';
 import { Order } from '../../app/models/Order.js';
 import dotenv from 'dotenv';
-import { createObjectCsvWriter } from 'csv-writer';
+import { stringify } from 'csv-stringify/sync';
 
 dotenv.config();
 
@@ -15,7 +15,6 @@ fs.mkdirSync(EXPORT_DIR, { recursive: true });
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/britbook';
 
 export async function generateOrderExport() {
-  const { createObjectCsvWriter } = await import('csv-writer');
   console.log('✅ Connecting to MongoDB...');
   await mongoose.connect(MONGODB_URI);
   console.log('✅ Connected to MongoDB');
@@ -30,10 +29,9 @@ export async function generateOrderExport() {
   console.log(`🔍 Fetching orders with filter:`, filter);
 
   const orders = await Order.find(filter).populate('items.listing').limit(50);
-
   console.log(`📦 Found ${orders.length} orders.`);
 
-  const rows = [];
+  const records = [];
 
   for (const order of orders) {
     console.log(`🔍 Processing order: ${order._id}`);
@@ -41,18 +39,8 @@ export async function generateOrderExport() {
     for (const item of order.items) {
       const listing = item.listing;
 
-      if (!listing) {
-        console.warn(`⚠️ Skipping item: listing not populated for order ${order._id}, item:`, item);
-        continue;
-      }
-
-      if (!listing.inventory) {
-        console.warn(`⚠️ Skipping item: no inventory for listing ${listing._id} in order ${order._id}`);
-        continue;
-      }
-
-      if (!listing.inventory.inventorySyncId) {
-        console.warn(`⚠️ Skipping item: missing inventorySyncId for listing ${listing._id} in order ${order._id}`);
+      if (!listing || !listing.inventory || !listing.inventory.inventorySyncId) {
+        console.warn(`⚠️ Skipping item for order ${order._id}: Missing listing or inventorySyncId.`);
         continue;
       }
 
@@ -65,19 +53,19 @@ export async function generateOrderExport() {
 
       console.log(`✅ Writing row: SKU=${sku}, Qty=${item.quantity}, Order=${order._id}`);
 
-      rows.push({
-        order_id: order._id.toString(),
-        order_date: orderDate,
+      records.push([
+        order._id.toString(),
+        orderDate,
         sku,
-        quantity: item.quantity,
-        price: item.priceAtPurchase,
-        customer_name: fullName,
-        shipping_addr: address,
-      });
+        item.quantity,
+        item.priceAtPurchase,
+        fullName,
+        address,
+      ]);
     }
   }
 
-  if (rows.length === 0) {
+  if (records.length === 0) {
     console.log('ℹ️ No valid items to export.');
     await mongoose.disconnect();
     console.log('🔌 MongoDB disconnected');
@@ -87,21 +75,22 @@ export async function generateOrderExport() {
   const filename = `orders_${dayjs().format('YYYY-MM-DD_HH-mm')}.csv`;
   const filepath = path.join(EXPORT_DIR, filename);
 
-  const csvWriter = createObjectCsvWriter({
-    path: filepath,
-    header: [
-      { id: 'order_id', title: 'Order ID' },
-      { id: 'order_date', title: 'Order Date' },
-      { id: 'sku', title: 'SKU' },
-      { id: 'quantity', title: 'Quantity' },
-      { id: 'price', title: 'Price' },
-      { id: 'customer_name', title: 'Customer Name' },
-      { id: 'shipping_addr', title: 'Shipping Address' },
-    ],
+  const header = [
+    'Order ID',
+    'Order Date',
+    'SKU',
+    'Quantity',
+    'Price',
+    'Customer Name',
+    'Shipping Address',
+  ];
+
+  const csvContent = stringify([header, ...records], {
+    quoted: true,
   });
 
-  await csvWriter.writeRecords(rows);
-  console.log(`✅ Exported ${rows.length} rows to ${filename}`);
+  fs.writeFileSync(filepath, csvContent);
+  console.log(`✅ Exported ${records.length} rows to ${filename}`);
 
   await mongoose.disconnect();
   console.log('🔌 MongoDB disconnected');
