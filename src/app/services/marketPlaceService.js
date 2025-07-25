@@ -3,6 +3,9 @@ import { MarketplaceListing } from '../models/MarketPlace.js';
 import { Types } from 'mongoose';
 import { openai } from '../../lib/config/openAi.js';
 import BeeQueue from 'bee-queue';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 // Redis setup
 const redisQueue = new BeeQueue('enrichmentQueue', {
