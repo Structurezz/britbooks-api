@@ -25,9 +25,13 @@ try {
 }
 
 // Redis connection (shared for BeeQueue)
-const connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
+if (!process.env.REDIS_URL) {
+  throw new Error('❌ REDIS_URL not found. Make sure it is defined in .env or Railway variables');
+}
+const connection = new IORedis(process.env.REDIS_URL, {
   maxRetriesPerRequest: null,
 });
+
 
 // Slug helper
 function slugify(text) {
