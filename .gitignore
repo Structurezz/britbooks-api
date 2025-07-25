@@ -35,3 +35,4 @@ Thumbs.db
 # Miscellaneous
 *.lock
 src/ftp-root/staging/outgoing/orders/*.csv
+node_modules/
