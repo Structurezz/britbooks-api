@@ -1,7 +1,8 @@
 import dotenv from 'dotenv';
-import IORedis from 'ioredis';
-
 import mongoose from 'mongoose';
+import IORedis from 'ioredis';
+import BeeQueue from 'bee-queue';
+
 import { MarketplaceListing } from '../../app/models/MarketPlace.js';
 import { openai } from './openAi.js';
 import { fetchCoverImageUrl } from '../utils/fetchCoverImageUrl.js';
@@ -9,30 +10,26 @@ import { fetchCoverImageUrl } from '../utils/fetchCoverImageUrl.js';
 dotenv.config();
 
 // Validate required environment variables
-if (!process.env.OPENAI_API_KEY) {
-  console.error('❌ OPENAI_API_KEY not found in environment variables.');
-  process.exit(1);
-}
-if (!process.env.MONGODB_URI) {
-  console.error('❌ MONGODB_URI not found.');
+if (!process.env.OPENAI_API_KEY || !process.env.MONGODB_URI) {
+  console.error('❌ Required environment variables missing');
   process.exit(1);
 }
 
+// MongoDB connection
 try {
-  await mongoose.connect(process.env.MONGODB_URI, {
-  
-  });
+  await mongoose.connect(process.env.MONGODB_URI);
   console.log('✅ MongoDB connected');
 } catch (err) {
   console.error('❌ MongoDB connection failed:', err);
   process.exit(1);
 }
 
-// Redis connection
+// Redis connection (shared for BeeQueue)
 const connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: null,
 });
 
+// Slug helper
 function slugify(text) {
   return text
     .toString()
@@ -42,6 +39,7 @@ function slugify(text) {
     .replace(/^-+|-+$/g, '');
 }
 
+// Main enrichment logic
 async function enrichListing(listing) {
   const slug = slugify(listing.title);
   const basePreviewUrl = process.env.PREVIEW_IMAGE_BASE_URL || 'https://cdn.bookbank.com/previews';
@@ -52,36 +50,35 @@ async function enrichListing(listing) {
   ];
 
   const prompt = `
-  You are an AI assistant helping categorize books and generate metadata.
-  
-  Here is a book listing:
-  
-  Title: ${listing.title}
-  Author: ${listing.author || 'Unknown'}
-  Description: ${listing.notes || 'N/A'}
-  Condition: ${listing.condition}
-  Language: ${listing.language}
-  
-  Tasks:
-  1. If the author is unknown or missing, try to infer the correct author.
-  2. Categorize the book into a single category.
-  3. Generate exactly 3 relevant tags.
-  4. Provide a confidence score as a decimal (e.g., 0.85) for the categorization.
-  5. Generate exactly 2 sample page preview image URLs using this format: "${expectedSampleUrls[0]}" and "${expectedSampleUrls[1]}".
-  
-  Respond in **strict JSON** format like:
-  {
-    "author": "J.R.R. Tolkien",
-    "category": "Fantasy Fiction",
-    "tags": ["Fantasy", "Adventure", "Classic"],
-    "confidence": 0.92,
-    "samplePageUrls": [
-      "${expectedSampleUrls[0]}",
-      "${expectedSampleUrls[1]}"
-    ]
-  }
-  `;
-  
+You are an AI assistant helping categorize books and generate metadata.
+
+Here is a book listing:
+
+Title: ${listing.title}
+Author: ${listing.author || 'Unknown'}
+Description: ${listing.notes || 'N/A'}
+Condition: ${listing.condition}
+Language: ${listing.language}
+
+Tasks:
+1. If the author is unknown or missing, try to infer the correct author.
+2. Categorize the book into a single category.
+3. Generate exactly 3 relevant tags.
+4. Provide a confidence score as a decimal (e.g., 0.85).
+5. Generate exactly 2 sample page preview image URLs using this format: "${expectedSampleUrls[0]}" and "${expectedSampleUrls[1]}".
+
+Respond in strict JSON format:
+{
+  "author": "J.R.R. Tolkien",
+  "category": "Fantasy Fiction",
+  "tags": ["Fantasy", "Adventure", "Classic"],
+  "confidence": 0.92,
+  "samplePageUrls": [
+    "${expectedSampleUrls[0]}",
+    "${expectedSampleUrls[1]}"
+  ]
+}
+`;
 
   try {
     const response = await openai.chat.completions.create({
@@ -93,38 +90,26 @@ async function enrichListing(listing) {
     const content = response.choices?.[0]?.message?.content?.trim();
     if (!content) throw new Error('Empty response from OpenAI');
 
-    console.log('🧠 AI Response Content:', content);
-
     let aiData = {};
-    let coverImageUrl = '';
     try {
       aiData = JSON.parse(content);
-      console.log('✅ Parsed AI Data:', JSON.stringify(aiData, null, 2));
-    
-      // ✅ Now that we have title/author, fetch real book cover
-      coverImageUrl = await fetchCoverImageUrl({
-        title: listing.title,
-        author: aiData.author || listing.author,
-        isbn: listing.isbn,
-      });
     } catch (parseErr) {
       console.error(`❌ JSON parse error: ${parseErr.message}`);
       aiData.samplePageUrls = [];
     }
-    
 
-    let sampleUrls = [];
+    const coverImageUrl = await fetchCoverImageUrl({
+      title: listing.title,
+      author: aiData.author || listing.author,
+      isbn: listing.isbn,
+    });
 
-    if (
+    const sampleUrls =
       Array.isArray(aiData.samplePageUrls) &&
       aiData.samplePageUrls.length === 2 &&
       aiData.samplePageUrls.every((url, i) => url === expectedSampleUrls[i])
-    ) {
-      sampleUrls = aiData.samplePageUrls;
-    } else {
-      console.warn('⚠️ Using fallback sample URLs');
-      sampleUrls = expectedSampleUrls;
-    }
+        ? aiData.samplePageUrls
+        : expectedSampleUrls;
 
     const updatedListing = await MarketplaceListing.findById(listing._id);
     if (!updatedListing) throw new Error('Listing not found');
@@ -141,54 +126,50 @@ async function enrichListing(listing) {
 
     await updatedListing.save({ validateBeforeSave: true });
 
-    const finalSaved = await MarketplaceListing.findById(listing._id);
-    console.log(`✅ Successfully enriched and saved listing "${finalSaved.title}" (${listing._id})`);
-    console.log('   → Tags:', finalSaved.autoCategorizedTags);
-    console.log('   → Category:', finalSaved.category);
-    console.log('   → Sample URLs:', finalSaved.samplePageUrls);
+    console.log(`✅ Enriched: "${updatedListing.title}" (${listing._id})`);
   } catch (err) {
-    console.error(`❌ Enrichment failed for listing ${listing._id}:`, err.message);
+    console.error(`❌ Enrichment failed for ${listing._id}:`, err.message);
   }
 }
-const { Worker } = await import('bullmq');
 
-const worker = new Worker(
-  'enrichmentQueue',
-  async (job) => {
-    const { listingId } = job.data;
-    console.log(`🔄 Starting enrichment for listing ${listingId}`);
+// BeeQueue worker setup
+const enrichmentQueue = new BeeQueue('enrichmentQueue', {
+  isWorker: true,
+  redis: connection,
+});
 
+
+enrichmentQueue.process(async (job, done) => {
+  const { listingId } = job.data;
+  console.log(`🔄 Processing listing ${listingId}`);
+
+  try {
     const listing = await MarketplaceListing.findById(listingId);
     if (!listing) {
-      console.warn(`⚠️ Listing with ID ${listingId} not found`);
-      return;
+      console.warn(`⚠️ Listing ${listingId} not found`);
+      return done(); // Don't fail the job
     }
 
     if (listing.aiMetadataFilled) {
-      console.log(`⏩ Listing ${listingId} already enriched. Skipping.`);
-      return;
+      console.log(`⏭️ Already enriched. Skipping listing ${listingId}`);
+      return done();
     }
 
     await enrichListing(listing);
-  },
-  {
-    connection,
-    concurrency: 2,
-    attempts: 3,
-    backoff: {
-      type: 'exponential',
-      delay: 5000,
-    },
+    done();
+  } catch (err) {
+    console.error(`🔥 Job failed: ${err.message}`);
+    done(err);
   }
-);
-
-worker.on('completed', (job) => {
-  console.log(`🎉 Job ${job.id} completed successfully`);
 });
 
-worker.on('failed', (job, err) => {
-  console.error(`🔥 Job ${job?.id} failed:`, err.message);
+enrichmentQueue.on('succeeded', (job) => {
+  console.log(`🎉 Job ${job.id} completed`);
 });
 
+enrichmentQueue.on('failed', (job, err) => {
+  console.error(`💥 Job ${job.id} failed: ${err.message}`);
+});
 
-export { worker, enrichListing, connection as redis };
+// Export for reuse/testing
+export { enrichmentQueue, enrichListing, connection as redis };

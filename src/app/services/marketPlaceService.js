@@ -2,14 +2,14 @@
 import { MarketplaceListing } from '../models/MarketPlace.js';
 import { Types } from 'mongoose';
 import { openai } from '../../lib/config/openAi.js';
-import { Queue } from 'bullmq';
-import IORedis from 'ioredis';
-
+import BeeQueue from 'bee-queue';
 
 // Redis setup
-const connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379');
-const redisQueue = new Queue('enrichmentQueue', { connection });
-
+const redisQueue = new BeeQueue('enrichmentQueue', {
+  redis: {
+    url: process.env.REDIS_URL || 'redis://localhost:6379',
+  },
+});
 export async function enrichListingWithAI(listing) {
   const prompt = `
 Categorize and tag the following book:
@@ -50,11 +50,14 @@ Respond in JSON format:
 
 export async function queueAIEnrichment(listingId) {
   try {
-    await redisQueue.add('enrich-listing', { listingId });
+    await redisQueue
+      .createJob({ listingId }) 
+      .save();
   } catch (err) {
     console.error('❌ Failed to enqueue listing for enrichment:', err);
   }
 }
+
 
 export async function upsertListingFromInventory(data, syncBatchId) {
     const {

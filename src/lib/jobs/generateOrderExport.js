@@ -1,25 +1,19 @@
 import fs from 'fs';
 import path from 'path';
 import dayjs from 'dayjs';
-import mongoose from 'mongoose';
 import { fileURLToPath } from 'url';
-import { Order } from '../../app/models/Order.js';
 import dotenv from 'dotenv';
 import { stringify } from 'csv-stringify/sync';
-import {MarketplaceListing} from '../../app/models/MarketPlace.js';
+
+import { Order } from '../../app/models/Order.js';
+import { MarketplaceListing } from '../../app/models/MarketPlace.js';
 
 dotenv.config();
 
 const EXPORT_DIR = path.resolve('./src/ftp-root/staging/outgoing/orders');
 fs.mkdirSync(EXPORT_DIR, { recursive: true });
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/britbook';
-
 export async function generateOrderExport() {
-  console.log('✅ Connecting to MongoDB...');
-  await mongoose.connect(MONGODB_URI);
-  console.log('✅ Connected to MongoDB');
-
   console.log('🚀 Running order export job...');
 
   const filter = {
@@ -68,8 +62,6 @@ export async function generateOrderExport() {
 
   if (records.length === 0) {
     console.log('ℹ️ No valid items to export.');
-    await mongoose.disconnect();
-    console.log('🔌 MongoDB disconnected');
     return;
   }
 
@@ -92,16 +84,4 @@ export async function generateOrderExport() {
 
   fs.writeFileSync(filepath, csvContent);
   console.log(`✅ Exported ${records.length} rows to ${filename}`);
-
-  await mongoose.disconnect();
-  console.log('🔌 MongoDB disconnected');
-}
-
-// ESM script execution check
-const __filename = fileURLToPath(import.meta.url);
-if (process.argv[1] === __filename) {
-  generateOrderExport().catch(async (err) => {
-    console.error('❌ Failed to generate order export:', err);
-    await mongoose.disconnect();
-  });
 }
