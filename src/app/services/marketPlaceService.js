@@ -8,9 +8,13 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Redis setup
+if (!process.env.REDIS_URL) {
+  throw new Error('❌ REDIS_URL not set. Check your .env or Railway service variables.');
+}
+
 const redisQueue = new BeeQueue('enrichmentQueue', {
   redis: {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
+    url: process.env.REDIS_URL,
   },
 });
 export async function enrichListingWithAI(listing) {
