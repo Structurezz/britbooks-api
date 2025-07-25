@@ -1,5 +1,5 @@
 import { Types } from 'mongoose';
-import { MarketplaceListing } from '../models/Marketplace.js';
+import { MarketplaceListing } from '../models/MarketPlace.js';
 import { Order } from '../models/Order.js';
 import { generateOrderReceiptPdf } from '../../lib/utils/pdfGenerator.js';
 
