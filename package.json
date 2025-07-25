@@ -25,6 +25,7 @@
     "bullmq": "^5.56.6",
     "chokidar": "^4.0.3",
     "cors": "^2.8.5",
+    "cosmiconfig": "^9.0.0",
     "csv-parse": "^6.1.0",
     "csv-parser": "^3.2.0",
     "csv-stringify": "^6.6.0",
