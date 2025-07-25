@@ -8,8 +8,7 @@
     "start:dev": "nodemon src/main.js",
     "worker": "node src/queue/enrichmentWorker.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "init:ftp": "node src/lib/config/ftp-setup.js",
-    "postinstall": "npm install abort-controller --force"
+    "init:ftp": "node src/lib/config/ftp-setup.js"
   },
   "keywords": [],
   "author": "Orizu Michael Akam",
