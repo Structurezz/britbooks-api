@@ -1,4 +1,4 @@
-// Scalable Marketplace Service with Redis Queue for AI Enrichment
+
 import { MarketplaceListing } from '../models/MarketPlace.js';
 import { Types } from 'mongoose';
 import { openai } from '../../lib/config/openAi.js';
