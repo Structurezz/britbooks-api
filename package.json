@@ -15,7 +15,6 @@
   "license": "ISC",
   "description": "API for managing wallets and payments, supporting both fiat and cryptocurrency transactions. This API provides features for wallet creation, balance management, transaction handling, and integration with external payment gateways.",
   "dependencies": {
-    "@fast-csv/format": "^5.0.2",
     "@fast-csv/parse": "^5.0.2",
     "axios": "^1.10.0",
     "basic-ftp": "^5.0.5",

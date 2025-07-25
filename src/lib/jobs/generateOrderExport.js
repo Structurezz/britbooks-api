@@ -4,11 +4,10 @@ import dayjs from 'dayjs';
 import mongoose from 'mongoose';
 import { fileURLToPath } from 'url';
 import { Order } from '../../app/models/Order.js';
-
 import dotenv from 'dotenv';
+import { createObjectCsvWriter } from 'csv-writer';
 
 dotenv.config();
-
 
 const EXPORT_DIR = path.resolve('./src/ftp-root/staging/outgoing/orders');
 fs.mkdirSync(EXPORT_DIR, { recursive: true });
@@ -16,7 +15,6 @@ fs.mkdirSync(EXPORT_DIR, { recursive: true });
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/britbook';
 
 export async function generateOrderExport() {
-  const { writeToStream } = await import('@fast-csv/format');
   console.log('✅ Connecting to MongoDB...');
   await mongoose.connect(MONGODB_URI);
   console.log('✅ Connected to MongoDB');
@@ -88,9 +86,20 @@ export async function generateOrderExport() {
   const filename = `orders_${dayjs().format('YYYY-MM-DD_HH-mm')}.csv`;
   const filepath = path.join(EXPORT_DIR, filename);
 
-  const stream = fs.createWriteStream(filepath);
-  writeToStream(stream, rows, { headers: true });
+  const csvWriter = createObjectCsvWriter({
+    path: filepath,
+    header: [
+      { id: 'order_id', title: 'Order ID' },
+      { id: 'order_date', title: 'Order Date' },
+      { id: 'sku', title: 'SKU' },
+      { id: 'quantity', title: 'Quantity' },
+      { id: 'price', title: 'Price' },
+      { id: 'customer_name', title: 'Customer Name' },
+      { id: 'shipping_addr', title: 'Shipping Address' },
+    ],
+  });
 
+  await csvWriter.writeRecords(rows);
   console.log(`✅ Exported ${rows.length} rows to ${filename}`);
 
   await mongoose.disconnect();

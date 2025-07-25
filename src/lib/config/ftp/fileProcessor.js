@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import csv from 'csv-parser';
-import { writeToStream } from '@fast-csv/format';
+import { createObjectCsvWriter } from 'csv-writer';
 import dayjs from 'dayjs';
 import {
   upsertListingFromInventory,
@@ -106,15 +106,25 @@ async function processInventoryMods(filePath) {
 }
 
 /**
- * Utility to write CSV log to error-logs folder
+ * Utility to write CSV log to error-logs folder using csv-writer
  */
 async function writeCsvLog(type, rows) {
   const logFilePath = path.join(
     LOG_PATH,
     `${type}-log_${dayjs().format('YYYY-MM-DD_HH-mm')}.csv`
   );
-  const writeStream = fs.createWriteStream(logFilePath);
-  writeToStream(writeStream, rows, { headers: true });
+
+  const csvWriter = createObjectCsvWriter({
+    path: logFilePath,
+    header: [
+      { id: 'sku', title: 'sku' },
+      { id: 'status', title: 'status' },
+      { id: 'error', title: 'error' },
+    ],
+  });
+
+  await csvWriter.writeRecords(rows);
+  console.log(`📝 Log written to: ${logFilePath}`);
 }
 
 export { processCsvFile, processInventoryMods };
