@@ -9,7 +9,7 @@
     "worker": "node src/queue/enrichmentWorker.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "init:ftp": "node src/lib/config/ftp-setup.js",
-    "postinstall": "npx npm-force-resolutions"
+
   },
   "keywords": [],
   "author": "Orizu Michael Akam",
@@ -48,6 +48,7 @@
     "npm": "^10.9.3",
     "openai": "^4.72.0",
     "otp-generator": "^4.0.1",
+    "package-lock.json": "^1.0.0",
     "pdfkit": "^0.17.1",
     "punycode": "^2.3.1",
     "puppeteer": "^24.10.2",
@@ -59,7 +60,8 @@
     "whatwg-url": "^14.0.0"
   },
   "devDependencies": {
-    "npm-force-resolutions": "^0.0.10"
+    "npm-force-resolutions": "^0.0.10",
+
   },
   "resolutions": {
     "abort-controller": "^3.0.0"
