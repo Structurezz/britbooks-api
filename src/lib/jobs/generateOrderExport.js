@@ -15,6 +15,7 @@ fs.mkdirSync(EXPORT_DIR, { recursive: true });
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/britbook';
 
 export async function generateOrderExport() {
+  const { createObjectCsvWriter } = await import('csv-writer');
   console.log('✅ Connecting to MongoDB...');
   await mongoose.connect(MONGODB_URI);
   console.log('✅ Connected to MongoDB');
