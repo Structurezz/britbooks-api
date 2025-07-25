@@ -2,7 +2,7 @@ import axios from "axios";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 import crypto from "crypto";
-import puppeteer from "puppeteer";
+
 
 
 dotenv.config();
