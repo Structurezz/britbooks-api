@@ -74,32 +74,62 @@ export const sendEmailVerificationLink = async (user) => {
     const code = generateOtp(user.email, timestamp);
 
     const mailOptions = {
-      from: `"BritBooks" <${process.env.FROM_EMAIL}>`, // Added sender name
+      from: `"BritBooks" <${process.env.FROM_EMAIL}>`,
       to: user.email,
-      subject: "Verify Your BritBooks Account",
+      subject: "Your BritBooks Verification Code",
       html: `
-        <div style="font-family: 'Georgia', serif; color: #2c2c2c; padding: 30px; max-width: 600px; margin: auto; border: 1px solid #d9b99b; background: #fdfaf6;">
-          <h2 style="text-align: center; color: #5c4033;">One Step Closer to Your Next Read</h2>
-          <p style="line-height: 1.6;">Dear <strong>${user.fullName}</strong>,</p>
-          <p style="line-height: 1.6;">Thank you for joining BritBooks, where stories come to life. To verify your email, please use the 6-digit code below:</p>
-          <div style="font-size: 28px; font-weight: bold; letter-spacing: 6px; text-align: center; margin: 25px 0; background: #f5efe7; padding: 20px; border-radius: 8px; color: #5c4033;">
-            ${code}
+        <div style="font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #f8f9fa; padding: 40px 0;">
+          <div style="max-width: 580px; margin: auto; background: #ffffff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); padding: 40px;">
+            <div style="text-align: center; margin-bottom: 30px;">
+              <img src="https://britbuild.netlify.app/logobrit.png" alt="BritBooks Logo" style="height: 50px;" />
+            </div>
+
+            <h2 style="text-align: center; color: #1f2937; font-size: 22px; margin-bottom: 20px;">
+              Verify Your Email to Continue
+            </h2>
+
+            <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">
+              Hi <strong>${user.fullName}</strong>,
+            </p>
+
+            <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">
+              Thanks for signing up to <strong>BritBooks</strong> — your destination for timeless reads and modern classics. To complete your registration, please use the verification code below:
+            </p>
+
+            <div style="text-align: center; margin: 30px 0;">
+              <div style="display: inline-block; background: #eef2ff; color: #4338ca; font-size: 28px; font-weight: 600; padding: 16px 32px; border-radius: 10px; letter-spacing: 6px;">
+                ${code}
+              </div>
+            </div>
+
+            <p style="font-size: 14px; color: #6b7280;">
+              This code is valid for the next 30 minutes. If you didn’t request this, please ignore this email.
+            </p>
+
+            <p style="font-size: 14px; color: #4b5563; margin-top: 30px;">
+              Warm regards,<br>
+              <strong>The BritBooks Team</strong>
+            </p>
+
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 40px 0;" />
+
+            <p style="font-size: 12px; text-align: center; color: #9ca3af;">
+              &copy; ${new Date().getFullYear()} BritBooks. All rights reserved.
+            </p>
           </div>
-          <p style="line-height: 1.6;">This code expires in 30 minutes. If you didn’t request this, feel free to ignore this email.</p>
-          <p style="line-height: 1.6;">Yours in stories,<br>The BritBooks Team</p>
-          <p style="text-align: center; font-size: 12px; color: #6b7280;">© ${new Date().getFullYear()} BritBooks. All rights reserved.</p>
         </div>
       `,
     };
 
     await transporter.sendMail(mailOptions);
-    console.log(`📨 Verification code sent to ${user.email}`);
+    console.log(`📨 Modern verification email sent to ${user.email}`);
     return { success: true };
   } catch (err) {
-    console.error("❌ Error sending verification email:", err);
+    console.error("❌ Error sending modern email:", err);
     return { success: false, error: err.message };
   }
 };
+
 
 // Verify OTP Code
 export const checkEmailVerificationCode = async (email, code) => {

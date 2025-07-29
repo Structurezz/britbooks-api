@@ -1,222 +1,380 @@
-import bcrypt from "bcrypt";
-import User from "../models/User.js";
-import { generateToken } from "../../lib/utils/jwtUtils.js";
-import twilio from "twilio";
-import { sendEmailVerificationLink, checkEmailVerificationCode, sendLoginCredentials } from "./nexcessService.js";
+import bcrypt from 'bcrypt';
+import User from '../models/User.js';
+import { sendVerificationCode, checkVerificationCode} from './twilioService.js';
+import { generateToken } from '../../lib/utils/jwtUtils.js';
+import { createWallet } from './walletService.js';
+import { sendEmailVerificationLink, checkEmailVerificationCode } from './nexcessService.js';
 
-// Twilio configuration
-const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-const serviceId = process.env.TWILIO_VERIFY_SERVICE_SID;
 
-// Signup - Registers a new user and sends credentials + OTP
-export const signup = async (userData) => {
-  const { fullName, email, phoneNumber, password, role } = userData;
+export const register = async (fullName, email, phoneNumber, password, role) => {
+  const existingUser = await User.findOne({ $or: [{ email }, { phoneNumber }] });
+  if (existingUser) throw new Error('Email or phone number already in use.');
 
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const user = new User({
+    fullName,
+    email,
+    phoneNumber,
+    password: hashedPassword,
+    role: role || 'user',
+    isVerified: false,
+  });
+  await user.save();
+
+  const phoneCodeSent = await sendVerificationCode(phoneNumber);
+  const emailCodeSent = await sendEmailVerificationLink(user);
+  if (!phoneCodeSent || !emailCodeSent.success) {
+    throw new Error('Failed to send verification code(s).');
+  }
+
+  return { userId: user._id, hashedPassword };
+};
+
+// Service for verifying registration or login
+export const verifyRegistration = async (phoneNumber, code, sessionData) => {
+  console.log('🔐 Verifying registration with:', { phoneNumber, code });
+
+  const cleanedCode = code.toString().trim();
+  if (!/^\d{6}$/.test(cleanedCode)) {
+    throw new Error('Invalid OTP format. Must be a 6-digit number.');
+  }
+
+  let user = await User.findOne({ phoneNumber });
+  const isNewUser = !user;
+
+  const email = user?.email || sessionData?.email;
+  if (!email) {
+    throw new Error('Email is required for verification.');
+  }
+
+  let phoneVerificationResult = { valid: false };
+  let emailVerificationResult = { valid: false };
+
+  // Try email verification first
   try {
-    // Validate inputs
-    if (!password || typeof password !== "string") {
-      throw new Error("Invalid password provided");
+    emailVerificationResult = await checkEmailVerificationCode(email, cleanedCode);
+    console.log('📧 Email verification result:', emailVerificationResult);
+  } catch (err) {
+    console.error('❌ Email verification failed:', err.message);
+  }
+
+  // Fallback to phone verification if email fails
+  if (!emailVerificationResult.valid) {
+    try {
+      phoneVerificationResult = await checkVerificationCode(phoneNumber, cleanedCode);
+      console.log('📱 Phone verification result:', phoneVerificationResult);
+    } catch (err) {
+      console.error('❌ Phone verification failed:', err.message);
     }
-    if (!phoneNumber || !email) {
-      throw new Error("Phone number and email are required");
+  }
+
+  if (!emailVerificationResult.valid && !phoneVerificationResult.valid) {
+    throw new Error('Invalid OTP. Verification failed.');
+  }
+
+  // If it's a new user, create their record now
+  if (isNewUser) {
+    if (!sessionData?.fullName || !sessionData?.hashedPassword) {
+      throw new Error('Missing registration data. Please register again.');
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ $or: [{ email }, { phoneNumber }] });
-    if (existingUser) {
-      throw new Error("User with provided email or phone number already exists");
-    }
-
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create user instance
-    const user = new User({
+    const { fullName, hashedPassword } = sessionData;
+    user = new User({
       fullName,
       email,
       phoneNumber,
       password: hashedPassword,
-      role: role || "user",
-      isVerified: false,
+      isVerified: true,
     });
 
-    // Save user
     await user.save();
 
-    // Send login credentials email
-    const credentialsResult = await sendLoginCredentials(user, password);
-    if (!credentialsResult.success) {
-      console.error(`Signup error for user ${user._id}: Failed to send login credentials:`, credentialsResult.error);
-      throw new Error("Failed to send login credentials email");
+    try {
+      await createWallet(user._id);
+    } catch (walletError) {
+      console.error('💸 Wallet creation failed:', walletError);
+      throw new Error('Account created but wallet setup failed.');
+    }
+  } else if (!user.isVerified) {
+    user.isVerified = true;
+    await user.save();
+  }
+
+  const token = generateToken({
+    userId: user._id,
+    email: user.email,
+    role: user.role,
+  });
+
+  return {
+    token,
+    userDetails: {
+      userId: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      role: user.role,
+    },
+  };
+};
+
+
+
+
+// Service for logging in a user
+export const login = async (email, password) => {
+  const user = await User.findOne({ email });
+  if (!user) throw new Error('Invalid credentials.');
+
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+  if (!isPasswordValid) throw new Error('Invalid credentials.');
+
+  let emailCodeSent = { success: false };
+  let phoneCodeSent = false;
+
+  try {
+    emailCodeSent = await sendEmailVerificationLink(user);
+  } catch (e) {
+    emailCodeSent = { success: false };
+  }
+
+  try {
+    if (user.phoneNumber) {
+      phoneCodeSent = await sendVerificationCode(user.phoneNumber);
+    }
+  } catch (e) {
+    phoneCodeSent = false;
+  }
+
+  if (!emailCodeSent.success) {
+    throw new Error('Failed to send email verification.');
+  }
+
+  return { userId: user._id };
+};
+
+// Service for verifying login
+export const verifyLogin = async (phoneNumber, code, userId) => {
+  console.log('🔍 Verifying login with:', { phoneNumber, code, userId });
+
+  // Validate code
+  const cleanedCode = code?.toString().trim();
+  if (!cleanedCode || !/^\d{6}$/.test(cleanedCode)) {
+    throw new Error('Invalid OTP format. Must be a 6-digit number.');
+  }
+
+  // Load user
+  const user = await User.findById(userId);
+  if (!user) throw new Error('User not found.');
+
+  // Optional: use phone number from DB if not passed explicitly
+  const phone = phoneNumber || user.phoneNumber;
+
+  let phoneVerificationResult = { valid: false };
+  let emailVerificationResult = { valid: false };
+
+  // First try email
+  try {
+    emailVerificationResult = await checkEmailVerificationCode(user.email, cleanedCode);
+    console.log('📧 Email verification result:', emailVerificationResult);
+  } catch (error) {
+    console.error('❌ Email OTP check error:', error.message);
+  }
+
+  // Then try phone
+  if (!emailVerificationResult.valid) {
+    try {
+      phoneVerificationResult = await checkVerificationCode(phone, cleanedCode);
+      console.log('📱 Phone verification result:', phoneVerificationResult);
+    } catch (error) {
+      console.error('❌ Phone OTP check error:', error.message);
+    }
+  }
+
+  if (!phoneVerificationResult.valid && !emailVerificationResult.valid) {
+    throw new Error('Invalid OTP. The code does not match the phone or email OTP.');
+  }
+
+  // Generate JWT
+  const token = generateToken({
+    userId: user._id,
+    fullName: user.fullName,
+    email: user.email,
+    role: user.role,
+  });
+
+  return {
+    token,
+    userDetails: {
+      userId: user._id,
+      fullName: user.fullName,
+      phoneNumber: user.phoneNumber,
+      email: user.email,
+      role: user.role,
+    },
+  };
+};
+
+
+export const resendOtp = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new Error("User not found.");
     }
 
-    // Send OTP via Twilio (SMS)
-    await client.verify.services(serviceId).verifications.create({
-      to: `+${phoneNumber}`,
-      channel: "sms",
-    });
+    const { phoneNumber, email } = user;
+    if (!phoneNumber && !email) {
+      throw new Error("User must have at least a phone number or email.");
+    }
 
-    // Send OTP via email
-    const emailOtpResult = await sendEmailVerificationLink(user);
-    if (!emailOtpResult.success) {
-      console.error(`Signup error for user ${user._id}: Failed to send email OTP:`, emailOtpResult.error);
-      throw new Error("Failed to send verification email");
+    let phoneCodeSent = false;
+    let emailCodeSent = { success: false };
+
+    if (phoneNumber) {
+      phoneCodeSent = await sendVerificationCode(phoneNumber);
+    }
+
+    if (email) {
+      emailCodeSent = await sendEmailVerificationLink(user);
+    }
+
+    if (!phoneCodeSent && !emailCodeSent.success) {
+      throw new Error("Failed to send any verification code.");
+    }
+
+    return { message: "Verification code sent to your phone and/or email." };
+  } catch (error) {
+    throw new Error(error.message);
+  }
+};
+
+
+
+
+export const forgotPassword = async (email) => {
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      throw new Error("User not found.");
+    }
+
+    const { phoneNumber } = user;
+    if (!phoneNumber && !email) {
+      throw new Error("User must have at least a phone number or email.");
+    }
+
+    let emailCodeSent = { success: false };
+    let phoneCodeSent = false;
+
+    if (email) {
+      try {
+        emailCodeSent = await sendEmailVerificationLink(user);
+      } catch (e) {
+        emailCodeSent = { success: false };
+      }
+    }
+
+    if (phoneNumber) {
+      try {
+        phoneCodeSent = await sendVerificationCode(phoneNumber);
+      } catch (e) {
+        phoneCodeSent = false;
+      }
+    }
+
+    if (!emailCodeSent.success && !phoneCodeSent) {
+      throw new Error("Failed to send any verification code.");
     }
 
     return {
-      message: "Registration successful. OTP sent to your phone and email. Check your email for login credentials.",
-      userId: user._id,
+      message: emailCodeSent.success
+        ? "Verification link sent to your email."
+        : "Verification code sent to your phone.",
+        userId: user._id,
     };
   } catch (error) {
-    console.error("Signup error:", error.message);
-    throw new Error(`Signup failed: ${error.message}`);
+    throw new Error(error.message);
   }
 };
 
-// Verify OTP - Confirms OTP (SMS or email) and verifies the user
-export const verifyOtp = async (userId, otp, channel = "sms") => {
-  try {
-    // Sanitize and validate code
-    const cleanedCode = otp.toString().trim();
-    if (!/^\d{6}$/.test(cleanedCode)) {
-      throw new Error("Invalid OTP format. Must be a 6-digit number.");
-    }
 
+
+
+export const resetPassword = async (userId, code, newPassword) => {
+  try {
     const user = await User.findById(userId);
     if (!user) {
-      throw new Error("User not found");
+      throw new Error("User not found.");
     }
 
-    let isValid = false;
-
-    // Verify OTP based on channel
-    if (channel === "sms") {
-      const verificationCheck = await client.verify.services(serviceId).verificationChecks.create({
-        to: `+${user.phoneNumber}`,
-        code: cleanedCode,
-      });
-      isValid = verificationCheck.valid;
-    } else if (channel === "email") {
-      const emailVerification = await checkEmailVerificationCode(user.email, cleanedCode);
-      isValid = emailVerification.valid;
-    } else {
-      throw new Error("Invalid verification channel");
+    const { phoneNumber, email } = user;
+    if (!email && !phoneNumber) {
+      throw new Error("User must have a phone number or email.");
     }
 
-    if (!isValid) {
-      throw new Error("Invalid OTP");
-    }
+    let isCodeValid = false;
 
-    // Mark user as verified if not already
-    if (!user.isVerified) {
-      user.isVerified = true;
-      await user.save();
-    }
-
-    // Generate auth token
-    const token = generateToken({ id: user._id, role: user.role });
-
-    return { message: "Verification successful", token };
-  } catch (error) {
-    console.error(`OTP verification error for user ${userId}:`, error.message);
-    throw new Error(`Verification failed: ${error.message}`);
-  }
-};
-
-// Login - Authenticates user and sends OTP via SMS and email
-export const login = async (credentials) => {
-    const { email, phoneNumber, password } = credentials;
-  
-    try {
-      const user = await User.findOne({ $or: [{ email }, { phoneNumber }] });
-      if (!user) {
-        throw new Error("User not found");
-      }
-  
-      if (!user.isVerified) {
-        throw new Error("User is not verified");
-      }
-  
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-      if (!isPasswordValid) {
-        throw new Error("Invalid credentials");
-      }
-  
-      let smsSent = false;
-  
-      // 🔹 Attempt to send SMS OTP (but don’t fail if it breaks)
+    if (email) {
       try {
-        await client.verify.services(serviceId).verifications.create({
-          to: `+${user.phoneNumber}`,
-          channel: "sms",
-        });
-        smsSent = true;
-        console.log(`✅ SMS OTP sent to ${user.phoneNumber}`);
-      } catch (twilioError) {
-        console.warn(`⚠️ Twilio SMS failed for ${user.phoneNumber}: ${twilioError.message}`);
-        // Continue without blocking login
+        const result = await checkEmailVerificationCode(email, code);
+        if (result?.valid === true) {
+          isCodeValid = true;
+        }
+      } catch (err) {
+        console.warn(`Email verification failed for ${email}: ${err.message}`);
       }
-  
-      // 🔹 Always send Email OTP
-      const emailResult = await sendEmailVerificationLink(user);
-      if (!emailResult.success) {
-        console.error(`❌ Email OTP failed for ${user.email}: ${emailResult.error}`);
-        throw new Error("Failed to send verification email. Please try again.");
-      }
-  
-      return {
-        message: smsSent
-          ? "Login successful. OTP sent to your email and phone."
-          : "Login successful. OTP sent to your email.",
-        userId: user._id,
-        smsSent, // optional: expose if SMS was successful
-      };
-  
-    } catch (error) {
-      console.error("❌ Login error:", error.message);
-      throw new Error(error.message || "Login failed");
     }
-  };
-  
-  
-  
 
-// Get User by ID
-export const getUserById = async (id) => {
-  try {
-    const user = await User.findById(id).select("-password");
-    if (!user) throw new Error("User not found");
-    return user;
+    if (!isCodeValid && phoneNumber) {
+      try {
+        const result = await checkVerificationCode(phoneNumber, code);
+        if (result?.valid === true) {
+          isCodeValid = true;
+        }
+      } catch (err) {
+        console.warn(`Phone verification failed for ${phoneNumber}: ${err.message}`);
+      }
+    }
+
+    if (!isCodeValid) {
+      throw new Error("Invalid or expired verification code.");
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await User.updateOne({ _id: userId }, { password: hashedPassword });
+
+    return { message: "Password reset successful." };
   } catch (error) {
-    console.error(`Get user error for user ${id}:`, error.message);
+    console.error("Password reset error:", error.message);
     throw new Error(error.message);
   }
 };
 
-// Update User
-export const updateUser = async (id, updateData) => {
-  try {
-    const user = await User.findById(id);
-    if (!user) throw new Error("User not found");
 
-    Object.assign(user, updateData);
-    await user.save();
 
-    return { message: "User updated successfully", user };
-  } catch (error) {
-    console.error(`Update user error for user ${id}:`, error.message);
-    throw new Error(error.message);
+export const changePassword = async (userId, currentPassword, newPassword) => {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new Error("User not found.");
   }
+
+  const isMatch = await bcrypt.compare(currentPassword, user.password);
+  if (!isMatch) {
+    throw new Error("Current password is incorrect.");
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  user.password = hashedPassword;
+  await user.save();
+
+  return { message: "Password updated successfully." };
 };
 
-// Delete User
-export const deleteUser = async (id) => {
-  try {
-    const user = await User.findByIdAndDelete(id);
-    if (!user) throw new Error("User not found");
-    return { message: "User deleted successfully" };
-  } catch (error) {
-    console.error(`Delete user error for user ${id}:`, error.message);
-    throw new Error(error.message);
-  }
-};
+
+export async function validateApiKey(apiKey) {
+  const user = await User.findOne({ apiKey });
+  if (!user) return null;
+  return { id: user._id.toString(), role: user.role };
+}
