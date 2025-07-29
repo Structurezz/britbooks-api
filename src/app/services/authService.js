@@ -2,7 +2,7 @@ import bcrypt from 'bcrypt';
 import User from '../models/User.js';
 import { sendVerificationCode, checkVerificationCode} from './twilioService.js';
 import { generateToken } from '../../lib/utils/jwtUtils.js';
-import { createWallet } from './walletService.js';
+import { createWallet } from './walletservice.js';
 import { sendEmailVerificationLink, checkEmailVerificationCode } from './nexcessService.js';
 
 
