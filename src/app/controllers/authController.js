@@ -1,5 +1,5 @@
 import { register, verifyRegistration, verifyLogin, login, resendOtp,forgotPassword,changePassword,resetPassword } from '../services/authService.js';
-import {createWallet, getWalletDetails} from '../services/walletService.js';
+import {createWallet, getWalletDetails} from '../services/walletservice.js';
 import User from '../models/User.js';
 import Wallet from '../models/Wallet.js'; 
 import jwt from 'jsonwebtoken';
