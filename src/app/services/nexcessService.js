@@ -186,3 +186,75 @@ export const generateInvoicePDF = async (invoiceHtml) => {
     throw new Error("PDF generation failed");
   }
 };
+
+
+export const sendAdminAlert = async (subject, messageHtml) => {
+  try {
+    const mailOptions = {
+      from: `"BritBooks Alerts" <${process.env.FROM_EMAIL}>`,
+      to: process.env.ADMIN_EMAIL,
+      subject: subject || "📢 Admin Alert from BritBooks",
+      html: `
+        <div style="font-family: 'Georgia', serif; padding: 30px; background: #fdfaf6; color: #2c2c2c;">
+          <h2 style="color: #5c4033;">Admin Notification</h2>
+          ${messageHtml}
+          <p style="margin-top: 30px; font-size: 12px; color: #6b7280;">Sent via BritBooks system | ${new Date().toLocaleString()}</p>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log("📨 Admin alert sent");
+  } catch (err) {
+    console.error("❌ Failed to send admin alert:", err.message);
+  }
+};
+
+
+export const sendUserCancellationNotification = async (user, reason = "Your scheduled service has been cancelled.") => {
+  try {
+    const mailOptions = {
+      from: `"BritBooks" <${process.env.FROM_EMAIL}>`,
+      to: user.email,
+      subject: "Cancellation Notice",
+      html: `
+        <div style="font-family: 'Georgia', serif; padding: 30px; background: #fdfaf6; color: #2c2c2c;">
+          <h2 style="color: #5c4033;">Notice of Cancellation</h2>
+          <p>Dear <strong>${user.fullName}</strong>,</p>
+          <p>${reason}</p>
+          <p>If you have any questions or need assistance, please reach out to our support team.</p>
+          <p style="margin-top: 30px;">Warm regards,<br>The BritBooks Team</p>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`📨 Cancellation notice sent to ${user.email}`);
+  } catch (err) {
+    console.error("❌ Error sending cancellation notice:", err.message);
+  }
+};
+
+export const sendAdminCancellationAlert = async ({ user, reason }) => {
+  try {
+    const mailOptions = {
+      from: `"BritBooks Alerts" <${process.env.FROM_EMAIL}>`,
+      to: process.env.ADMIN_EMAIL,
+      subject: `⚠️ A User Cancelled a Service`,
+      html: `
+        <div style="font-family: 'Georgia', serif; padding: 30px; background: #fdfaf6; color: #2c2c2c;">
+          <h2 style="color: #5c4033;">User Cancellation Alert</h2>
+          <p><strong>User:</strong> ${user.fullName} (${user.email})</p>
+          <p><strong>Reason:</strong> ${reason || 'Not specified'}</p>
+          <p>Please take any necessary follow-up action.</p>
+        </div>
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log("📨 Admin cancellation alert sent");
+  } catch (err) {
+    console.error("❌ Error sending admin cancellation alert:", err.message);
+  }
+};
+

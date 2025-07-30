@@ -21,6 +21,7 @@ import { setupFtpFolders } from '../lib/config/ftp/ftp-setup.js';
 
 import { enrichmentQueue } from '../lib/config/enrichmentWorker.js';
 import connectDB from '../lib/config/db.js';
+import userRoutes from '../routes/userRoutes.js';
 
 dotenv.config();
 
@@ -40,6 +41,7 @@ app.use('/api/support', supportRoutes);
 app.use('/api/wallet', walletRoutes);
 app.use('/api', accountAggregationRoutes);
 app.use('/api/market', marketPlaceRoutes);
+app.use('/api/users', userRoutes);
 
 // 404 Handler
 app.use((req, res, next) => {
