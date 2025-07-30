@@ -15,7 +15,6 @@ export const sendVerificationCode = async (phoneNumber) => {
             });
             console.log("New Verification Service SID:", verificationService.sid);
             verificationServiceSid = verificationService.sid;
-            console.log('New Verification Service created:', verificationServiceSid);
         }
 
         const formattedPhoneNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
@@ -24,12 +23,14 @@ export const sendVerificationCode = async (phoneNumber) => {
             .services(verificationServiceSid)
             .verifications.create({ to: formattedPhoneNumber, channel: 'sms' });
 
-        return verification.status === 'pending'; 
+        return { success: verification.status === 'pending' };
     } catch (error) {
-        console.error(`Error sending verification code: ${error.message}`);
-        throw new Error(`Error sending verification code: ${error.message}`);
+        console.error(`Twilio verification failed: ${error.message}`);
+        // Do not throw, return fallback
+        return { success: false, error: error.message };
     }
 };
+
 
 
 // Check verification code
@@ -38,7 +39,8 @@ export const checkVerificationCode = async (phoneNumber, code) => {
         const verificationServiceSid = process.env.TWILIO_VERIFY_SERVICE_SID;
 
         if (!verificationServiceSid) {
-            throw new Error("Twilio Verify Service SID is not configured.");
+            console.warn("No Twilio Verify Service SID configured.");
+            return { success: false, message: "Twilio not configured" };
         }
 
         const formattedPhoneNumber = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
@@ -49,11 +51,20 @@ export const checkVerificationCode = async (phoneNumber, code) => {
                 code
             });
 
-        return { success: verificationCheck.status === 'approved', message: verificationCheck.status === 'approved' ? 'OTP verified successfully' : 'Invalid OTP' };
+        const approved = verificationCheck.status === 'approved';
+
+        return {
+            success: approved,
+            message: approved ? 'OTP verified successfully' : 'Invalid OTP'
+        };
     } catch (error) {
-        console.error(`Error checking verification code: ${error.message}`);
-        throw new Error(`Error checking verification code: ${error.message}`);
+        console.error(`Twilio OTP check failed: ${error.message}`);
+        return {
+            success: false,
+            message: `OTP verification skipped or failed: ${error.message}`
+        };
     }
 };
+
 
 
