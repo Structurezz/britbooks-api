@@ -93,7 +93,7 @@ export const sendEmailVerificationLink = async (user) => {
             </p>
 
             <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">
-              Thanks for signing up to <strong>BritBooks</strong> — your destination for timeless reads and modern classics. To complete your registration, please use the verification code below:
+              Thanks for choosing <strong>BritBooks</strong> — your destination for timeless reads and modern classics. To proceed, Please use the verification code below:
             </p>
 
             <div style="text-align: center; margin: 30px 0;">
