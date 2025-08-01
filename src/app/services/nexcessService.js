@@ -258,3 +258,90 @@ export const sendAdminCancellationAlert = async ({ user, reason }) => {
   }
 };
 
+
+export const sendTransferSuccessfulEmail = async ({ user, amount, transactionId, balance, type = "transfer", receiptUrl, }) => {
+  try {
+    if (!user || !user.email) {
+      console.error("❌ Email not sent: 'user' or 'user.email' is missing.", { user });
+      return;
+    }
+
+    const subject =
+      type === "topup"
+        ? "Wallet Top-up Successful"
+        : type === "withdrawal"
+        ? "Withdrawal Successful"
+        : "Transfer Successful";
+
+    const mailOptions = {
+      from: `"BritBooks Wallet" <${process.env.FROM_EMAIL}>`,
+      to: user.email,
+      subject,
+      html: `
+        <div style="font-family: 'Georgia', serif; background: #fdfaf6; padding: 40px; color: #2c2c2c; max-width: 600px; margin: auto; border: 1px solid #d9b99b; border-radius: 8px;">
+          <img src="https://cdn-icons-png.flaticon.com/512/2232/2232688.png" alt="BritBooks" style="width: 60px; display: block; margin: 0 auto 20px;" />
+          <h2 style="text-align: center; color: #5c4033;">${subject}</h2>
+          <p>Dear <strong>${user.fullName || "Customer"}</strong>,</p>
+          <p>We're happy to inform you that your recent ${type === "withdrawal" ? "withdrawal" : type === "topup" ? "wallet top-up" : "transfer"} of <strong>₦${amount.toLocaleString()}</strong> has been successfully processed.</p>
+
+          <div style="background: #f5efe7; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Transaction ID:</strong> ${transactionId}</p>
+            <p><strong>Amount:</strong> ₦${amount.toLocaleString()}</p>
+            <p><strong>Wallet Balance:</strong> ₦${balance.toLocaleString()}</p>
+          </div>
+          <p><strong>View Receipt:</strong> <a href="${receiptUrl}" target="_blank">${receiptUrl}</a></p>
+
+
+          <p>If you have any questions, please don’t hesitate to contact our support team.</p>
+          <p style="margin-top: 30px;">Warm regards,<br>The BritBooks Team</p>
+
+          <p style="text-align: center; font-size: 12px; color: #6b7280; margin-top: 40px;">&copy; ${new Date().getFullYear()} BritBooks. All rights reserved.</p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`📨 Transfer success email sent to ${user.email}`);
+  } catch (err) {
+    console.error("❌ Error sending transfer email:", err.message);
+  }
+};
+
+
+export const sendWithdrawalNotificationEmail = async ({ user, amount, transactionId, destination, status = "processing" }) => {
+  try {
+    const mailOptions = {
+      from: `"BritBooks Wallet" <${process.env.FROM_EMAIL}>`,
+      to: user.email,
+      subject: "Withdrawal Request Received",
+      html: `
+        <div style="font-family: 'Georgia', serif; background: #fdfaf6; padding: 40px; color: #2c2c2c; max-width: 600px; margin: auto; border: 1px solid #d9b99b; border-radius: 8px;">
+          <img src="https://cdn-icons-png.flaticon.com/512/2232/2232688.png" alt="BritBooks Logo" style="width: 60px; display: block; margin: 0 auto 20px;" />
+          <h2 style="text-align: center; color: #5c4033;">Your Withdrawal is Being Processed</h2>
+          
+          <p>Dear <strong>${user.fullName}</strong>,</p>
+
+          <p>We’ve received your request to withdraw <strong>₦${amount.toLocaleString()}</strong> from your BritBooks wallet. It’s currently being <strong>${status}</strong> and should be completed shortly.</p>
+
+          <div style="background: #f5efe7; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Transaction ID:</strong> ${transactionId}</p>
+            <p><strong>Amount:</strong> ₦${amount.toLocaleString()}</p>
+            <p><strong>Destination:</strong> ${destination}</p>
+            <p><strong>Status:</strong> ${status}</p>
+          </div>
+
+          <p>If you did not initiate this withdrawal, please contact our support team immediately.</p>
+
+          <p style="margin-top: 30px;">Warm regards,<br>The BritBooks Team</p>
+
+          <p style="text-align: center; font-size: 12px; color: #6b7280; margin-top: 40px;">&copy; ${new Date().getFullYear()} BritBooks. All rights reserved.</p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`📨 Withdrawal notification email sent to ${user.email}`);
+  } catch (err) {
+    console.error("❌ Error sending withdrawal notification email:", err.message);
+  }
+};
