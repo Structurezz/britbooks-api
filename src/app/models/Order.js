@@ -45,11 +45,14 @@ const orderSchema = new Schema({
   shippingAddress: addressSchema,
   billingAddress: addressSchema,
   total: { type: Number },
-
   currency: { type: String, default: 'GBP' },
+
+
+  paymentIntentId: { type: String, index: true },
 }, {
   collection: 'orders',
   timestamps: true,
 });
+
 
 export const Order = model('Order', orderSchema);

@@ -2,18 +2,22 @@ import dotenv from 'dotenv';
 import mongoose from 'mongoose';
 import IORedis from 'ioredis';
 import BeeQueue from 'bee-queue';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 import { MarketplaceListing } from '../../app/models/MarketPlace.js';
-import { openai } from './openAi.js';
 import { fetchCoverImageUrl } from '../utils/fetchCoverImageUrl.js';
 
 dotenv.config();
 
 // Validate required environment variables
-if (!process.env.OPENAI_API_KEY || !process.env.MONGODB_URI) {
+if (!process.env.GEMINI_API_KEY || !process.env.MONGODB_URI) {
   console.error('❌ Required environment variables missing');
   process.exit(1);
 }
+
+// Gemini client setup
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
 
 // MongoDB connection
 try {
@@ -31,7 +35,6 @@ if (!process.env.REDIS_URL) {
 const connection = new IORedis(process.env.REDIS_URL, {
   maxRetriesPerRequest: null,
 });
-
 
 // Slug helper
 function slugify(text) {
@@ -54,54 +57,66 @@ async function enrichListing(listing) {
   ];
 
   const prompt = `
-You are an AI assistant helping categorize books and generate metadata.
-
-Here is a book listing:
-
-Title: ${listing.title}
-Author: ${listing.author || 'Unknown'}
-Description: ${listing.notes || 'N/A'}
-Condition: ${listing.condition}
-Language: ${listing.language}
-
-Tasks:
-1. If the author is unknown or missing, try to infer the correct author.
-2. Categorize the book into a single category.
-3. Generate exactly 3 relevant tags.
-4. Provide a confidence score as a decimal (e.g., 0.85).
-5. Generate exactly 2 sample page preview image URLs using this format: "${expectedSampleUrls[0]}" and "${expectedSampleUrls[1]}".
-
-Respond in strict JSON format:
-{
-  "author": "J.R.R. Tolkien",
-  "category": "Fantasy Fiction",
-  "tags": ["Fantasy", "Adventure", "Classic"],
-  "confidence": 0.92,
-  "samplePageUrls": [
-    "${expectedSampleUrls[0]}",
-    "${expectedSampleUrls[1]}"
-  ]
-}
-`;
+  You are a book metadata assistant.
+  
+  Here is a book listing:
+  
+  Title: ${listing.title}
+  Author: ${listing.author || 'Unknown'}
+  Description: ${listing.notes || 'N/A'}
+  Condition: ${listing.condition}
+  Language: ${listing.language}
+  
+  Tasks:
+  
+  1. If the author is "Unknown" or missing, infer the correct author using available information.
+  2. Categorize the book into a single category.
+  3. Generate exactly 3 relevant tags (comma-separated keywords).
+  4. Provide a confidence score (decimal between 0 and 1).
+  5. Search Google Books and return a **real** cover image URL from there (do not fabricate it).
+  6. Search Google Books for 2 sample preview page image URLs (if available). If not, return null or empty strings.
+  
+  Respond strictly in **valid JSON** inside triple backticks like:
+  
+  \`\`\`json
+  {
+    "author": "George Orwell",
+    "category": "Dystopian Fiction",
+    "tags": ["dystopia", "totalitarianism", "classic"],
+    "confidence": 0.91,
+    "coverImageUrl": "https://books.google.com/books/content?id=xyz123&printsec=frontcover&img=1&zoom=1",
+    "samplePageUrls": [
+      "https://books.google.com/page1.jpg",
+      "https://books.google.com/page2.jpg"
+    ]
+  }
+  \`\`\`
+  `;
+  
+  
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4',
-      temperature: 0.3,
-      messages: [{ role: 'user', content: prompt }],
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
     });
 
-    const content = response.choices?.[0]?.message?.content?.trim();
-    if (!content) throw new Error('Empty response from OpenAI');
-
+    const content = result.response.text().trim();
+    if (!content) throw new Error('Empty response from Gemini');
+    
+    // 🧼 Strip code fences if present
+    let cleanContent = content;
+    if (cleanContent.startsWith('```')) {
+      cleanContent = cleanContent.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+    }
+    
     let aiData = {};
     try {
-      aiData = JSON.parse(content);
+      aiData = JSON.parse(cleanContent);
     } catch (parseErr) {
-      console.error(`❌ JSON parse error: ${parseErr.message}`);
+      console.error(`❌ JSON parse error: ${parseErr.message}\nGemini returned:\n${content}`);
       aiData.samplePageUrls = [];
     }
-
+    
     const coverImageUrl = await fetchCoverImageUrl({
       title: listing.title,
       author: aiData.author || listing.author,
@@ -143,8 +158,6 @@ const enrichmentQueue = new BeeQueue('enrichmentQueue', {
     url: process.env.REDIS_URL,
   },
 });
-
-
 
 enrichmentQueue.process(async (job, done) => {
   const { listingId } = job.data;

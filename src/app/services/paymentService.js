@@ -7,6 +7,8 @@ import { sendTransferSuccessfulEmail } from './nexcessService.js';
 import axios from 'axios';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import {Order} from '../models/Order.js';
+import {MarketplaceListing} from '../models/MarketPlace.js';
 dotenv.config();
 
 
@@ -17,7 +19,6 @@ const ADMIN_WALLET_ID = process.env.ADMIN_WALLET_ID;
 export const createPaymentIntentForOrder = async ({
   userId,
   email,
-  orderId,
   shippingAddress,
   items,
   subtotal,
@@ -30,11 +31,46 @@ export const createPaymentIntentForOrder = async ({
 
   if (amountInCents < 50) throw new Error('Total must be at least £0.50');
   if (!userId || !mongoose.Types.ObjectId.isValid(userId)) throw new Error('Invalid or missing userId');
-  if (!orderId) throw new Error('Order ID is required');
   if (!token || typeof token !== 'string') throw new Error('Missing or invalid Stripe token');
 
   const user = await User.findById(userId);
   if (!user) throw new Error(`User not found for userId: ${userId}`);
+
+  // Format items before usage in DB
+  const listingTitles = items.map(item => item.title);
+
+  const listings = await MarketplaceListing.find({
+    title: { $in: listingTitles },
+  });
+  
+  if (listings.length !== items.length) {
+    const missing = listingTitles.filter(t => !listings.some(l => l.title === t));
+    throw new Error(`Missing listings for items: ${missing.join(', ')}`);
+  }
+  
+  const formattedItems = items.map(item => {
+    const matchedListing = listings.find(l => l.title === item.title);
+    return {
+      listing: matchedListing._id,
+      quantity: item.quantity || 1,
+      priceAtPurchase: item.price,
+      currency: currency.toUpperCase(),
+    };
+  });
+  
+  
+  
+  // Format shipping address
+  const formattedShippingAddress = {
+    fullName: shippingAddress.name,
+    phoneNumber: shippingAddress.phoneNumber,
+    addressLine1: shippingAddress.line1,
+    addressLine2: shippingAddress.line2 || '',
+    city: shippingAddress.city,
+    state: shippingAddress.state || '',
+    postalCode: shippingAddress.postalCode,
+    country: shippingAddress.country,
+  };
 
   // 1. Create payment method
   const paymentMethod = await stripe.paymentMethods.create({
@@ -46,7 +82,7 @@ export const createPaymentIntentForOrder = async ({
     },
   });
 
-  // 2. Create and confirm PaymentIntent with enforced card and capture
+  // 2. Create and confirm PaymentIntent
   const paymentIntent = await stripe.paymentIntents.create({
     amount: amountInCents,
     currency,
@@ -55,10 +91,8 @@ export const createPaymentIntentForOrder = async ({
     payment_method: paymentMethod.id,
     payment_method_types: ['card'],
     receipt_email: email,
-    return_url: 'https://yourdomain.com/return', // optional, prevents Stripe errors on redirect flows
     metadata: {
       userId,
-      orderId,
       subtotal: subtotal.toFixed(2),
       shippingFee: shippingFee.toFixed(2),
       paymentType: 'order',
@@ -77,13 +111,13 @@ export const createPaymentIntentForOrder = async ({
 
   const paymentIntentId = paymentIntent.id;
 
-  // 3. Attempt to get charge and receipt
+  // 3. Try to fetch the receipt
   let charge = paymentIntent.charges?.data?.[0];
   let receiptUrl = charge?.receipt_url;
 
   if (!charge || !receiptUrl) {
     console.warn('⚠️ Initial charge missing. Retrying from Stripe...');
-    await new Promise((res) => setTimeout(res, 1500)); // small delay before retry
+    await new Promise((res) => setTimeout(res, 1500));
 
     const latestIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
     const fallbackCharge = latestIntent.charges?.data?.[0];
@@ -95,10 +129,8 @@ export const createPaymentIntentForOrder = async ({
     }
   }
 
-  if (!charge || !receiptUrl) {
-    console.warn('⚠️ Stripe did not provide a charge or receipt URL. Proceeding with pending status.');
-  }
   const finalStatus = receiptUrl ? 'succeeded' : 'pending';
+
   // 4. Save payment to DB
   await Payment.create({
     userId: user._id,
@@ -108,30 +140,52 @@ export const createPaymentIntentForOrder = async ({
     reference: paymentIntentId,
     status: finalStatus,
     type: 'order-payment',
-    orderId,
-    shippingAddress,
-    items,
+    shippingAddress: formattedShippingAddress,
+    items: formattedItems,
     receiptUrl,
     paymentIntentId,
   });
 
-  // 5. Send confirmation email
+  // 5. Create the Order
+  const newOrder = await Order.create({
+    user: user._id,
+    items: formattedItems,
+    shippingAddress: formattedShippingAddress,
+    total,
+    subtotal,
+    shippingFee,
+    paymentIntentId,
+    email,
+    status: finalStatus,
+    currency,
+    payment: {
+      status: finalStatus === 'succeeded' ? 'paid' : 'unpaid',
+      method: 'card',
+      transactionId: paymentIntentId,
+      paidAt: new Date(),
+    },
+  });
+
+  // 6. Send confirmation email
   await sendTransferSuccessfulEmail({
     user,
     amount: total,
-    transactionId: orderId,
+    transactionId: newOrder._id.toString(),
     type: 'transfer',
   });
 
+  // 7. Return data
   return {
     clientSecret: paymentIntent.client_secret,
     reference: paymentIntentId,
+    orderId: newOrder._id.toString(),
     status: paymentIntent.status,
     requiresAction: paymentIntent.status === 'requires_action',
     nextAction: paymentIntent.next_action || null,
     receiptUrl,
   };
 };
+
 
 
 
@@ -210,15 +264,16 @@ export const processSuccessfulPayment = async (reference, receiptUrl) => {
       txn => txn.transactionId === reference
     );
     if (existingTransaction) {
+      const order = await Order.findOne({ paymentIntentId: reference });
       return {
         success: true,
         message: 'Payment already verified.',
         walletBalance: wallet.balance,
-        transactions: wallet.transactions
+        transactions: wallet.transactions,
+        orderId: order?._id?.toString() || null
       };
     }
 
-    // ⛔️ Ensure receiptUrl is present before marking as succeeded
     if (!receiptUrl) {
       return {
         success: false,
@@ -226,12 +281,10 @@ export const processSuccessfulPayment = async (reference, receiptUrl) => {
       };
     }
 
-    // ✅ Update the payment record
     payment.status = 'succeeded';
     payment.receiptUrl = receiptUrl;
     await payment.save();
 
-    // 💳 Credit the wallet
     const updatedWallet = await Wallet.findOneAndUpdate(
       { _id: wallet._id },
       {
@@ -253,7 +306,8 @@ export const processSuccessfulPayment = async (reference, receiptUrl) => {
       { new: true }
     );
 
-    // 📧 Send confirmation email
+    const order = await Order.findOne({ paymentIntentId: reference });
+
     try {
       await sendWalletTopUpEmail(
         user,
@@ -269,13 +323,15 @@ export const processSuccessfulPayment = async (reference, receiptUrl) => {
       success: true,
       message: `Payment successful and ${walletType} wallet credited!`,
       walletBalance: updatedWallet.balance,
-      transactions: updatedWallet.transactions
+      transactions: updatedWallet.transactions,
+      orderId: order?._id?.toString() || null
     };
   } catch (error) {
     console.error('❌ Payment processing error:', error);
     return { success: false, error: error.message };
   }
 };
+
 
 
 

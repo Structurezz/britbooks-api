@@ -1,7 +1,7 @@
 
 import { MarketplaceListing } from '../models/MarketPlace.js';
 import { Types } from 'mongoose';
-import { openai } from '../../lib/config/openAi.js';
+import { genAI } from '../../lib/config/openAi.js';
 import BeeQueue from 'bee-queue';
 import dotenv from 'dotenv';
 
@@ -17,7 +17,21 @@ const redisQueue = new BeeQueue('enrichmentQueue', {
     url: process.env.REDIS_URL,
   },
 });
-export async function enrichListingWithAI(listing) {
+function extractRetryDelay(err) {
+  try {
+    const raw = err.message.match(/\[(\{.*\})\]$/);
+    if (raw) {
+      const errorData = JSON.parse(raw[1]);
+      const retryInfo = errorData.find(e => e['@type']?.includes('RetryInfo'));
+      if (retryInfo?.retryDelay?.endsWith('s')) {
+        return parseInt(retryInfo.retryDelay) * 1000;
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+export async function enrichListingWithAI(listing, retries = 3) {
   const prompt = `
 Categorize and tag the following book:
 
@@ -34,25 +48,50 @@ Respond in JSON format:
   "confidence": 0.92
 }`;
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4',
-      temperature: 0.3,
-      messages: [{ role: 'user', content: prompt }],
-    });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
 
-    const aiData = JSON.parse(response.choices[0].message.content);
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      });
 
-    return await MarketplaceListing.findByIdAndUpdate(listing._id, {
-      category: aiData.category || listing.category,
-      autoCategorizedTags: aiData.tags || [],
-      aiConfidenceScore: aiData.confidence || null,
-      aiMetadataFilled: true,
-    }, { new: true });
-  } catch (err) {
-    console.error('Failed to enrich with AI', err);
-    return listing;
+      const responseText = result.response.text().trim();
+      if (!responseText) throw new Error('Empty response from Gemini');
+
+      let aiData;
+      try {
+        aiData = JSON.parse(responseText);
+      } catch (err) {
+        console.error('❌ Failed to parse Gemini response:', err.message);
+        return listing;
+      }
+
+      return await MarketplaceListing.findByIdAndUpdate(
+        listing._id,
+        {
+          category: aiData.category || listing.category,
+          autoCategorizedTags: aiData.tags || [],
+          aiConfidenceScore: aiData.confidence || null,
+          aiMetadataFilled: true,
+        },
+        { new: true }
+      );
+    } catch (err) {
+      if (err.message.includes('429')) {
+        const delay = extractRetryDelay(err) || 60000;
+        console.warn(`⚠️ Rate limited by Gemini. Waiting ${delay / 1000}s before retrying...`);
+        await new Promise((res) => setTimeout(res, delay));
+        continue;
+      }
+
+      console.error('❌ Failed to enrich with Gemini AI:', err.message);
+      return listing;
+    }
   }
+
+  console.error(`❌ Failed after ${retries} retries. Skipping listing ${listing._id}`);
+  return listing;
 }
 
 export async function queueAIEnrichment(listingId) {
@@ -201,8 +240,17 @@ export async function archiveListing(listingId) {
 export async function getAllListingsForAdmin({ page = 1, limit = 20, includeArchived = false, sort = 'createdAt', order = 'desc', filters = {} }) {
   const query = includeArchived ? { ...filters } : { isArchived: false, ...filters };
   const sortOption = { [sort]: order === 'asc' ? 1 : -1 };
-  return await MarketplaceListing.find(query).sort(sortOption).skip((page - 1) * limit).limit(limit);
+
+  console.log('Running query:', query);  // ⬅️ Add this
+  console.log('Sort:', sortOption);
+
+  return await MarketplaceListing
+    .find(query)
+    .sort(sortOption)
+    .skip((page - 1) * limit)
+    .limit(limit);
 }
+
 
 export async function getPublishedListings({ page = 1, limit = 20, sort = 'listedAt', order = 'desc', filters = {} }) {
   const query = { isPublished: true, isArchived: false, ...filters };

@@ -19,6 +19,7 @@ import Wallet from '../models/Wallet.js';
 import { generateTransferReceiptPdf } from '../../lib/utils/generateTrasactionId.js';
 import { sendWithdrawalNotificationEmail } from '../services/nexcessService.js';
 import Stripe from 'stripe';
+import {Order} from '../models/Order.js';
 
 
 const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -119,7 +120,7 @@ export const handlePaymentSuccess = async (req, res) => {
         });
       }
   
-      // Clean reference if _secret was mistakenly passed
+      // Strip any _secret suffix if mistakenly sent from client
       const cleanReference = reference.split('_secret')[0];
   
       const payment = await Payment.findOne({ reference: cleanReference });
@@ -129,11 +130,13 @@ export const handlePaymentSuccess = async (req, res) => {
           message: 'Payment not found in database.',
         });
       }
+  
       const paymentIntentId = payment.paymentIntentId;
+  
+      // Retrieve latest status and receipt from Stripe
       const stripeIntent = await stripe.paymentIntents.retrieve(cleanReference);
       let receiptUrl = stripeIntent?.charges?.data?.[0]?.receipt_url || null;
   
-      // Fallback: attempt to fetch the charge directly if needed
       if (!receiptUrl) {
         console.warn('⚠️ Stripe receiptUrl missing — retrying...');
         const chargeId = stripeIntent?.charges?.data?.[0]?.id;
@@ -143,21 +146,22 @@ export const handlePaymentSuccess = async (req, res) => {
         }
       }
   
-      // Update DB only if not already succeeded
+      // Update payment record only if not yet marked as succeeded
       if (stripeIntent.status === 'succeeded' && payment.status !== 'succeeded') {
         payment.status = 'succeeded';
-  
-        // Only set receiptUrl if it exists
         payment.receiptUrl = receiptUrl || `https://dashboard.stripe.com/test/payments/${paymentIntentId}`;
-
-  
-        await payment.save(); // Will still work if receiptUrl is undefined
+        await payment.save();
       }
+  
+      // ✅ Lookup the associated order using exact paymentIntentId stored
+      const order = await Order.findOne({ paymentIntentId: payment.paymentIntentId });
   
       return res.status(200).json({
         success: true,
         message: 'Payment was successful.',
-        payment,
+      
+        orderId: order?._id?.toString() || null,
+      
       });
   
     } catch (error) {
@@ -169,6 +173,8 @@ export const handlePaymentSuccess = async (req, res) => {
       });
     }
   };
+  
+  
   
   
   

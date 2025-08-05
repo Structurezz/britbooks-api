@@ -99,3 +99,39 @@ export async function resendOrderDocuments(req, res) {
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 }
+
+export async function getOrdersByUserId(req, res) {
+  try {
+    const { userId: targetUserId } = req.params;
+    const { page = 1, limit = 20, ...filters } = req.query;
+    const requesterId = req.user?.id;
+    const role = req.user?.role || 'user';
+
+    if (!requesterId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    // Normalize to string for safe comparison
+    if (String(requesterId) !== String(targetUserId) && role !== 'admin') {
+      console.log('Forbidden access attempt:', {
+        requesterId,
+        targetUserId,
+        role,
+      });
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
+
+    const orders = await OrderService.getOrders({
+      userId: targetUserId,
+      role,
+      filters,
+      page: parseInt(page, 10),
+      limit: parseInt(limit, 10),
+    });
+
+    res.status(200).json({ success: true, orders });
+  } catch (error) {
+    console.error('Get orders by userId failed:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+}

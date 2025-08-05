@@ -22,7 +22,7 @@ const router = express.Router();
 router.post('/', handleCreateListing);
 router.put('/:id', handleUpdateListing);
 router.patch('/:id/archive', handleArchiveListing);
-router.get('/admin', handleGetAdminListings);
+router.get('/admin/listings', handleGetAdminListings);
 router.get('/published', handleGetPublishedListings);
 router.get('/search', handleSearchListings);
 router.get('/stats', handleListingStats);

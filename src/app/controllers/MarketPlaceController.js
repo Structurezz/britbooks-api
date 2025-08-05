@@ -45,10 +45,45 @@ import {
   
   export const handleGetAdminListings = async (req, res) => {
     try {
-      const listings = await getAllListingsForAdmin(req.query);
-      res.json({ success: true, listings });
+      const {
+        page = 1,
+        limit = 20,
+        includeArchived = false,
+        sort = 'createdAt',
+        order = 'desc',
+        ...filters
+      } = req.query;
+  
+      const parsedPage = parseInt(page);
+      const parsedLimit = parseInt(limit);
+      const parsedIncludeArchived = includeArchived === 'true';
+  
+      const listings = await getAllListingsForAdmin({
+        page: parsedPage,
+        limit: parsedLimit,
+        includeArchived: parsedIncludeArchived,
+        sort,
+        order,
+        filters,
+      });
+  
+      res.status(200).json({
+        success: true,
+        listings,
+        meta: {
+          page: parsedPage,
+          limit: parsedLimit,
+          sort,
+          order,
+          count: listings.length,
+        },
+      });
     } catch (err) {
-      res.status(500).json({ success: false, error: err.message });
+      console.error('❌ Failed to get admin listings:', err.message);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve listings. Please try again later.',
+      });
     }
   };
   

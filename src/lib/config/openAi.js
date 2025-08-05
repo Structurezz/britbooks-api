@@ -1,9 +1,6 @@
-
-import { OpenAI } from "openai";
 import dotenv from 'dotenv';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 dotenv.config();
 
-export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+export const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
