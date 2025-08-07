@@ -35,7 +35,7 @@ export const sendLoginCredentials = async (user, password = null) => {
     const generatedPassword = password || crypto.randomBytes(4).toString("hex"); // More secure random password
 
     const mailOptions = {
-      from: `"BritBooks" <${process.env.FROM_EMAIL}>`, // Added sender name
+      from: `"Chelsea from Britbooks" <${process.env.FROM_EMAIL}>`, // Added sender name
       to: user.email,
       subject: "Your BritBooks Journey Begins - Account Details",
       html: `
