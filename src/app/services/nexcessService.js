@@ -74,7 +74,7 @@ export const sendEmailVerificationLink = async (user) => {
     const code = generateOtp(user.email, timestamp);
 
     const mailOptions = {
-      from: `"BritBooks" <${process.env.FROM_EMAIL}>`,
+      from: `"Chelsea from Britbooks" <${process.env.FROM_EMAIL}>`,
       to: user.email,
       subject: "Your BritBooks Verification Code",
       html: `
