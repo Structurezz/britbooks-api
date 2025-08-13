@@ -74,14 +74,14 @@ export const sendEmailVerificationLink = async (user) => {
     const code = generateOtp(user.email, timestamp);
 
     const mailOptions = {
-      from: `"Chelsea from Britbooks" <${process.env.FROM_EMAIL}>`,
+      from: ` "Britbooks"<${process.env.FROM_EMAIL}>`,
       to: user.email,
       subject: "Your BritBooks Verification Code",
       html: `
         <div style="font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #f8f9fa; padding: 40px 0;">
           <div style="max-width: 580px; margin: auto; background: #ffffff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); padding: 40px;">
             <div style="text-align: center; margin-bottom: 30px;">
-              <img src="https://britbuild.netlify.app/logobrit.png" alt="BritBooks Logo" style="height: 50px;" />
+              <img src="https://britbooksfrontend-production.up.railway.app/logobrit.png" alt="BritBooks Logo" style="height: 50px;" />
             </div>
 
             <h2 style="text-align: center; color: #1f2937; font-size: 22px; margin-bottom: 20px;">
