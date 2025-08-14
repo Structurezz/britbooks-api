@@ -93,11 +93,10 @@ export const createPaymentIntentForOrder = async ({
     receipt_email: email,
     metadata: {
       userId,
-      subtotal: subtotal.toFixed(2),
-      shippingFee: shippingFee.toFixed(2),
-      paymentType: 'order',
-      itemSummary: items.map(i => `${i.title} (x${i.quantity})`).join(', '),
+      orderId: newOrder._id.toString(),
+      paymentType: 'order'
     },
+    
     shipping: {
       name: shippingAddress.name,
       address: {
