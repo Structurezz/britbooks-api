@@ -93,7 +93,6 @@ export const createPaymentIntentForOrder = async ({
     receipt_email: email,
     metadata: {
       userId,
-      orderId: newOrder._id.toString(),
       paymentType: 'order'
     },
     
