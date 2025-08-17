@@ -262,23 +262,48 @@ export async function getListingById(id) {
   return await MarketplaceListing.findOne({ _id: id, isPublished: true, isArchived: false });
 }
 
-export async function searchListings({ keyword, page = 1, limit = 20, filters = {}, sort = 'views', order = 'desc' }) {
-  const regex = new RegExp(keyword, 'i');
+export async function searchListings({
+  keyword,
+  page = 1,
+  limit = 20,
+  filters = {},
+  sort = 'views',
+  order = 'desc',
+}) {
+  if (!keyword) {
+    return [];
+  }
+
+  // exact/strict-ish match (case-insensitive)
+  const exactRegex = new RegExp(`^${keyword}$`, 'i');
+  const partialRegex = new RegExp(keyword, 'i');
+
   const query = {
     isPublished: true,
     isArchived: false,
-    $or: [
-      { title: regex },
-      { author: regex },
-      { tags: regex },
-      { autoCategorizedTags: regex },
-      { category: regex },
-    ],
     ...filters,
+    $or: [
+      // try exact title or author first
+      { title: exactRegex },
+      { author: exactRegex },
+      // then allow partial matches as fallback
+      { title: partialRegex },
+      { author: partialRegex },
+    ],
   };
-  const sortOption = { [sort]: order === 'asc' ? 1 : -1, aiConfidenceScore: -1 };
-  return await MarketplaceListing.find(query).sort(sortOption).skip((page - 1) * limit).limit(limit);
+
+  const sortOption = {
+    [sort]: order === 'asc' ? 1 : -1,
+    aiConfidenceScore: -1, // prioritize high-confidence AI matches
+  };
+
+  return await MarketplaceListing.find(query)
+    .sort(sortOption)
+    .skip((page - 1) * limit)
+    .limit(limit)
+    .exec();
 }
+
 
 export async function incrementViews(listingId) {
   await MarketplaceListing.findByIdAndUpdate(listingId, { $inc: { views: 1 } });
