@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pkg from 'ssh2';
+import crypto from 'crypto';
 
 const { Server, SFTP_STATUS_CODE } = pkg;
 
@@ -16,11 +17,23 @@ if (!fs.existsSync(ROOT)) {
   fs.mkdirSync(ROOT, { recursive: true });
 }
 
+// --- 🔑 Auto-generate host key if missing ---
+const hostKeyPath = path.join(__dirname, 'ssh_host_rsa_key');
+if (!fs.existsSync(hostKeyPath)) {
+  const { privateKey } = crypto.generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+  });
+  fs.writeFileSync(
+    hostKeyPath,
+    privateKey.export({ type: 'pkcs1', format: 'pem' })
+  );
+  console.log('🔑 Generated new SSH host key');
+}
+
 export function startSftpServer() {
   const server = new Server(
     {
-      hostKeys: [fs.readFileSync(path.join(__dirname, 'ssh_host_rsa_key'))],
-
+      hostKeys: [fs.readFileSync(hostKeyPath)],
     },
     (client) => {
       console.log('🔌 Client connected');
@@ -141,5 +154,4 @@ export function startSftpServer() {
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 SFTP Server running on port ${PORT}`);
   });
-  
 }
