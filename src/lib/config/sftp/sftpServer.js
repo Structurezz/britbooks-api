@@ -17,7 +17,7 @@ if (!fs.existsSync(ROOT)) {
   fs.mkdirSync(ROOT, { recursive: true });
 }
 
-// --- 🔑 Auto-generate host key if missing ---
+// --- 🔑 Auto-generate host key if missing 
 const hostKeyPath = path.join(__dirname, 'ssh_host_rsa_key');
 if (!fs.existsSync(hostKeyPath)) {
   const { privateKey } = crypto.generateKeyPairSync('rsa', {
