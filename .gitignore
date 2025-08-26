@@ -36,3 +36,4 @@ Thumbs.db
 *.lock
 src/ftp-root/staging/outgoing/orders/*.csv
 node_modules/
+package-lock.json

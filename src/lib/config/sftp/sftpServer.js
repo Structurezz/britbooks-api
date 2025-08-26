@@ -263,7 +263,7 @@ export function startSftpServer() {
     });
   });
 
-  const PORT = process.env.SFTP_PORT || 2222;
+  const PORT = process.env.PORT || 2222;
   server.listen(PORT, '0.0.0.0', () => console.log(`🚀 SFTP Server running on port ${PORT}`));
 }
 

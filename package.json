@@ -59,7 +59,8 @@
     "stripe": "^18.4.0",
     "twilio": "^5.3.6",
     "url": "^0.11.4",
-    "whatwg-url": "^14.0.0"
+    "whatwg-url": "^14.0.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "npm-force-resolutions": "^0.0.10"
