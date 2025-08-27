@@ -25,28 +25,33 @@ const CREDS = {
 
 // Ports
 const PORTS = {
-  staging: 2121,
-  live: process.env.PORT || 21,
+  staging: 2121,             // local dev
+  live: process.env.PORT,    // Railway will inject this
 };
 
 const FTP_ROOT = ROOTS[FTP_ENV];
 const { user: FTP_USER, pass: FTP_PASS } = CREDS[FTP_ENV];
 const FTP_PORT = PORTS[FTP_ENV];
 
+// Public hostname for PASV
+const PASV_HOST = FTP_ENV === 'live'
+  ? process.env.FTP_PUBLIC_HOST || 'ballast.proxy.rlwy.net'
+  : '127.0.0.1';
+
 // -------------------------
 // FTP SERVER
 // -------------------------
 const ftpServer = new FtpSrv(
-  `ftp://0.0.0.0:${FTP_PORT}`,
+  `ftp://0.0.0.0:${FTP_PORT}`,   // ✅ FIX: url must be string
   {
     anonymous: false,
     greeting: [
       `📚 Welcome to BritBooks FTP Server (${FTP_ENV.toUpperCase()})!`,
       'Only authorized access is permitted.',
     ],
-    pasv_url: '127.0.0.1',       // force localhost for PASV
-    pasv_min: 50000,             // ✅ correct way to set passive range
-    pasv_max: 50010        // ✅ force localhost in PASV response
+    pasv_url: PASV_HOST,
+    pasv_min: 50000,
+    pasv_max: 50010,
   }
 );
 
