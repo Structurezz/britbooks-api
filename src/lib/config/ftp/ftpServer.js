@@ -36,27 +36,27 @@ const FTP_ROOT = ROOTS[FTP_ENV];
 const { user: FTP_USER, pass: FTP_PASS } = CREDS[FTP_ENV];
 const FTP_PORT = PORTS[FTP_ENV];
 
-// Public hostname for PASV
-const PASV_HOST = FTP_ENV === 'live'
-  ? process.env.FTP_PUBLIC_HOST || 'hopper.proxy.rlwy.net'
-  : '127.0.0.1';
+// -------------------------
+// PASV CONFIG FOR VPS
+// -------------------------
+// Set this to your VPS public IP
+const PASV_HOST = FTP_ENV === 'live' ? '168.231.116.174' : '127.0.0.1';
+const PASV_MIN = 50000;
+const PASV_MAX = 50010;
 
 // -------------------------
 // FTP SERVER CONFIG
 // -------------------------
-const ftpServer = new FtpSrv(
-  `ftp://0.0.0.0:${FTP_PORT}`, 
-  {
-    anonymous: false,
-    greeting: [
-      `📚 Welcome to BritBooks FTP Server (${FTP_ENV.toUpperCase()})!`,
-      'Only authorized access is permitted.',
-    ],
-    pasv_url: PASV_HOST,
-    pasv_min: FTP_ENV === 'staging' ? 50000 : FTP_PORT,
-    pasv_max: FTP_ENV === 'staging' ? 50010 : FTP_PORT,
-  }
-);
+const ftpServer = new FtpSrv(`ftp://0.0.0.0:${FTP_PORT}`, {
+  anonymous: false,
+  greeting: [
+    `📚 Welcome to BritBooks FTP Server (${FTP_ENV.toUpperCase()})!`,
+    'Only authorized access is permitted.',
+  ],
+  pasv_url: PASV_HOST,
+  pasv_min: PASV_MIN,
+  pasv_max: PASV_MAX,
+});
 
 // -------------------------
 // EVENT HANDLERS
@@ -88,8 +88,9 @@ export const startFtpServer = async () => {
     await ftpServer.listen();
     console.log(`✅ FTP server (${FTP_ENV}) running at ftp://localhost:${FTP_PORT}`);
     if (FTP_ENV === 'live') {
-      console.log(`🌍 External access: ftp://${PASV_HOST}:${FTP_PORT}`);
+      console.log(`🌍 External access via VPS: ftp://${PASV_HOST}:${FTP_PORT}`);
       console.log(`🔑 FTP user: ${FTP_USER} | FTP pass: ${FTP_PASS}`);
+      console.log(`📡 Passive ports: ${PASV_MIN}-${PASV_MAX} must be forwarded on VPS`);
     }
   } else {
     console.log('ℹ️ FTP server already running');
