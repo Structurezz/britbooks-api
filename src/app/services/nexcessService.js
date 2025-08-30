@@ -8,18 +8,14 @@ import crypto from "crypto";
 dotenv.config();
 
 // SMTP Transporter (Nexcess)
+
 const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: 587,  // Secure SSL
-    secure: false,  // Use SSL
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
-
- 
+  service: process.env.EMAIL_SERVICE,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
 });
-
 // OTP Generator
 const generateOtp = (email, timestamp) => {
   const secret = process.env.OTP_SECRET || "default-secret";
