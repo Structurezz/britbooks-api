@@ -78,7 +78,7 @@ export const sendEmailVerificationLink = async (user) => {
     const code = generateOtp(user.email, timestamp);
 
     const mailOptions = {
-      from: ` Britbooks<${process.env.FROM_EMAIL}>`,
+      from: `BritBooks <${process.env.FROM_EMAIL}>`,
       to: user.email,
       subject: "Your BritBooks Verification Code",
       html: `
@@ -87,39 +87,20 @@ export const sendEmailVerificationLink = async (user) => {
             <div style="text-align: center; margin-bottom: 30px;">
               <img src="https://britbooksfrontend-production.up.railway.app/logobrit.png" alt="BritBooks Logo" style="height: 50px;" />
             </div>
-
-            <h2 style="text-align: center; color: #1f2937; font-size: 22px; margin-bottom: 20px;">
-              Verify Your Email to Continue
-            </h2>
-
+            <h2 style="text-align: center; color: #1f2937; font-size: 22px; margin-bottom: 20px;">Verify Your Email to Continue</h2>
+            <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">Hi <strong>${user.fullName}</strong>,</p>
             <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">
-              Hi <strong>${user.fullName}</strong>,
+              Thanks for choosing <strong>BritBooks</strong>. Please use the verification code below:
             </p>
-
-            <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">
-              Thanks for choosing <strong>BritBooks</strong> — your destination for timeless reads and modern classics. To proceed, Please use the verification code below:
-            </p>
-
             <div style="text-align: center; margin: 30px 0;">
               <div style="display: inline-block; background: #eef2ff; color: #4338ca; font-size: 28px; font-weight: 600; padding: 16px 32px; border-radius: 10px; letter-spacing: 6px;">
                 ${code}
               </div>
             </div>
-
-            <p style="font-size: 14px; color: #6b7280;">
-              This code is valid for the next 30 minutes. If you didn’t request this, please ignore this email.
-            </p>
-
-            <p style="font-size: 14px; color: #4b5563; margin-top: 30px;">
-              Warm regards,<br>
-              <strong>The BritBooks Team</strong>
-            </p>
-
+            <p style="font-size: 14px; color: #6b7280;">This code is valid for 30 minutes.</p>
+            <p style="font-size: 14px; color: #4b5563; margin-top: 30px;">Warm regards,<br><strong>The BritBooks Team</strong></p>
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 40px 0;" />
-
-            <p style="font-size: 12px; text-align: center; color: #9ca3af;">
-              &copy; ${new Date().getFullYear()} BritBooks. All rights reserved.
-            </p>
+            <p style="font-size: 12px; text-align: center; color: #9ca3af;">&copy; ${new Date().getFullYear()} BritBooks. All rights reserved.</p>
           </div>
         </div>
       `,
@@ -133,6 +114,7 @@ export const sendEmailVerificationLink = async (user) => {
     return { success: false, error: err.message };
   }
 };
+
 
 
 // Verify OTP Code
