@@ -17,9 +17,7 @@ const transporter = nodemailer.createTransport({
         pass: process.env.SMTP_PASS,
     },
 
-    tls: {
-      rejectUnauthorized: false, // helps avoid self-signed cert issues
-    },
+ 
 });
 
 // OTP Generator
