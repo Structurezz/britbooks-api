@@ -8,9 +8,10 @@ import crypto from "crypto";
 dotenv.config();
 
 // SMTP Transporter (Nexcess)
-
 const transporter = nodemailer.createTransport({
-  service: process.env.EMAIL_SERVICE,
+  host: process.env.SMTP_HOST,     // e.g. smtp.gmail.com or smtp.nexcess.net
+  port: process.env.SMTP_PORT,     // 465 (SSL) or 587 (TLS)
+  secure: process.env.SMTP_PORT == 465, // true for port 465, false for 587
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
