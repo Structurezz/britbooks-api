@@ -9,12 +9,12 @@ dotenv.config();
 
 // SMTP Transporter (Nexcess)
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,     // e.g. smtp.gmail.com or smtp.nexcess.net
-  port: process.env.SMTP_PORT,     // 465 (SSL) or 587 (TLS)
-  secure: process.env.SMTP_PORT == 465, // true for port 465, false for 587
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT),
+  secure: process.env.SMTP_SECURE === "true", // convert string to boolean
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
   },
 });
 // OTP Generator
