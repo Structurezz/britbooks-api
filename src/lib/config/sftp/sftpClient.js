@@ -22,14 +22,15 @@ async function syncSftp() {
     const mappings = [
       { remote: '/uploads/products', local: path.join(localBase, 'products') },
       { remote: '/uploads/inventory', local: path.join(localBase, 'inventory') },
+      { remote: '/uploads/orders', local: path.join(localBase, 'orders') },
+      { remote: '/uploads/listings', local: path.join(localBase, 'listings') },
     ];
 
     for (const { remote, local } of mappings) {
       fs.mkdirSync(local, { recursive: true });
 
-      // ensure remote folder exists
       try {
-        await client.mkdir(remote, true);
+        await client.mkdir(remote, true); // ensure remote dir exists
       } catch (e) {
         console.warn(`⚠️ Could not ensure remote dir ${remote}: ${e.message}`);
       }
@@ -46,10 +47,10 @@ async function syncSftp() {
             await client.fastGet(remotePath, localPath);
 
             try {
-              // ✅ only delete remote, don’t process here
-              await client.delete(remotePath);
+              await client.delete(remotePath); // remove remote after download
               console.log(`🗑️ Deleted remote file: ${remotePath}`);
               console.log(`📂 File ready for processing: ${localPath}`);
+              // 👆 At this point, your existing FTP chokidar watchers will detect the new file
             } catch (err) {
               console.error(`❌ Error handling ${file.name}:`, err.message);
             }
@@ -68,5 +69,5 @@ async function syncSftp() {
 export function startSftpSync() {
   console.log('🚨 Starting SFTP sync loop...');
   syncSftp(); // run immediately
-  setInterval(syncSftp, 60 * 1000); // repeat every 1 min
+  setInterval(syncSftp, 60 * 1000); // every 1 min
 }
