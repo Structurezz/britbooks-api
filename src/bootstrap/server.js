@@ -18,7 +18,7 @@ import { startSftpServer } from '../lib/config/sftp/sftpServer.js';
 import { startOrderResponseWatcher } from '../lib/integration/orderResponseWatcher.js';
 import { startEagleResponseWatcher } from '../lib/integration/eagleOrderResponseWatcher.js';
 import { setupFtpFolders } from '../lib/config/ftp/ftp-setup.js';
-
+import { startSftpSync } from '../lib/config/sftp/sftpClient.js';
 import { enrichmentQueue } from '../lib/config/enrichmentWorker.js';
 import connectDB from '../lib/config/db.js';
 import userRoutes from '../routes/userRoutes.js';
@@ -69,8 +69,10 @@ async function initServices() {
     startWatchingIncomingFiles();
     startFtpServer();
     startSftpServer();
+    startSftpSync();
     startOrderResponseWatcher();
     startEagleResponseWatcher();
+    
 
     enrichmentQueue.on('ready', () => {
       console.log('📥 Enrichment queue ready');
