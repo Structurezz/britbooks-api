@@ -1,22 +1,13 @@
-import axios from "axios";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import dotenv from "dotenv";
 import crypto from "crypto";
-
-
+import puppeteer from "puppeteer";
 
 dotenv.config();
 
-// SMTP Transporter (Nexcess)
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT),
-  secure: process.env.SMTP_SECURE === "true", // convert string to boolean
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+// Initialize Resend
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 // OTP Generator
 const generateOtp = (email, timestamp) => {
   const secret = process.env.OTP_SECRET || "default-secret";
@@ -28,86 +19,81 @@ const generateOtp = (email, timestamp) => {
   return otp.toString().padStart(6, "0");
 };
 
-// Send Login Credentials
-export const sendLoginCredentials = async (user, password = null) => {
+// 🔹 Utility: Send email via Resend
+const sendEmail = async ({ to, subject, html }) => {
   try {
-    const generatedPassword = password || crypto.randomBytes(4).toString("hex"); // More secure random password
-
-    const mailOptions = {
-      from: `"Chelsea from Britbooks" <${process.env.FROM_EMAIL}>`, // Added sender name
-      to: user.email,
-      subject: "Your BritBooks Journey Begins - Account Details",
-      html: `
-        <div style="font-family: 'Georgia', serif; color: #2c2c2c; padding: 30px; max-width: 600px; margin: auto; border: 1px solid #d9b99b; background: #fdfaf6;">
-          <img src="https://cdn-icons-png.flaticon.com/512/2232/2232688.png" alt="Open Book" style="width: 70px; margin: 0 auto; display: block;" />
-          <h2 style="text-align: center; color: #5c4033;">Welcome to BritBooks</h2>
-          <p style="line-height: 1.6;">Dear <strong>${user.fullName}</strong>,</p>
-          <p style="line-height: 1.6;">A new chapter awaits you at BritBooks! Your account is ready, and we’re thrilled to have you join our community of book lovers. Below are your login details to start exploring our literary world:</p>
-          <div style="background: #f5efe7; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
-            <p><strong>Email:</strong> ${user.email}</p>
-            <p><strong>Password:</strong> ${generatedPassword}</p>
-          </div>
-          <p style="text-align: center;">
-            <a href="https://britbooks.co.uk/login" style="padding: 12px 24px; background: #5c4033; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold;">Begin Your Story</a>
-          </p>
-          <p style="line-height: 1.6; font-style: italic; color: #6b7280;">“A book is a dream that you hold in your hand.” – Neil Gaiman</p>
-          <p style="line-height: 1.6;">Warmest regards,<br>The BritBooks Team</p>
-          <p style="text-align: center; font-size: 12px; color: #6b7280;">© ${new Date().getFullYear()} BritBooks. All rights reserved.</p>
-        </div>
-      `,
-    };
-
-    await transporter.sendMail(mailOptions);
-    console.log(`📧 Credentials sent to ${user.email}`);
-    return { success: true, password: generatedPassword };
+    const data = await resend.emails.send({
+      from: process.env.FROM_EMAIL, // must be a verified domain/sender in Resend
+      to,
+      subject,
+      html,
+    });
+    console.log(`📨 Email sent to ${to}: ${subject}`);
+    return { success: true, data };
   } catch (err) {
-    console.error("❌ Error sending login email:", err);
+    console.error("❌ Error sending email:", err.message);
     return { success: false, error: err.message };
   }
 };
 
+// Send Login Credentials
+export const sendLoginCredentials = async (user, password = null) => {
+  const generatedPassword = password || crypto.randomBytes(4).toString("hex");
+
+  const html = `
+    <div style="font-family: 'Georgia', serif; color: #2c2c2c; padding: 30px; max-width: 600px; margin: auto; border: 1px solid #d9b99b; background: #fdfaf6;">
+      <img src="https://cdn-icons-png.flaticon.com/512/2232/2232688.png" alt="Open Book" style="width: 70px; margin: 0 auto; display: block;" />
+      <h2 style="text-align: center; color: #5c4033;">Welcome to BritBooks</h2>
+      <p>Dear <strong>${user.fullName}</strong>,</p>
+      <p>Your login details are below:</p>
+      <div style="background: #f5efe7; padding: 20px; border-radius: 8px; text-align: center;">
+        <p><strong>Email:</strong> ${user.email}</p>
+        <p><strong>Password:</strong> ${generatedPassword}</p>
+      </div>
+      <p style="text-align: center;">
+        <a href="https://britbooks.co.uk/login" style="padding: 12px 24px; background: #5c4033; color: #fff; text-decoration: none; border-radius: 6px; font-weight: bold;">Login</a>
+      </p>
+      <p style="font-size: 12px; text-align: center; color: #6b7280;">© ${new Date().getFullYear()} BritBooks. All rights reserved.</p>
+    </div>
+  `;
+
+  return await sendEmail({
+    to: user.email,
+    subject: "Your BritBooks Account Details",
+    html,
+  });
+};
+
 // Send Email Verification Code
 export const sendEmailVerificationLink = async (user) => {
-  try {
-    const timestamp = Date.now();
-    const code = generateOtp(user.email, timestamp);
+  const timestamp = Date.now();
+  const code = generateOtp(user.email, timestamp);
 
-    const mailOptions = {
-      from: `BritBooks <${process.env.FROM_EMAIL}>`,
-      to: user.email,
-      subject: "Your BritBooks Verification Code",
-      html: `
-        <div style="font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #f8f9fa; padding: 40px 0;">
-          <div style="max-width: 580px; margin: auto; background: #ffffff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); padding: 40px;">
-            <div style="text-align: center; margin-bottom: 30px;">
-              <img src="https://britbooksfrontend-production.up.railway.app/logobrit.png" alt="BritBooks Logo" style="height: 50px;" />
-            </div>
-            <h2 style="text-align: center; color: #1f2937; font-size: 22px; margin-bottom: 20px;">Verify Your Email to Continue</h2>
-            <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">Hi <strong>${user.fullName}</strong>,</p>
-            <p style="font-size: 15px; color: #4b5563; line-height: 1.6;">
-              Thanks for choosing <strong>BritBooks</strong>. Please use the verification code below:
-            </p>
-            <div style="text-align: center; margin: 30px 0;">
-              <div style="display: inline-block; background: #eef2ff; color: #4338ca; font-size: 28px; font-weight: 600; padding: 16px 32px; border-radius: 10px; letter-spacing: 6px;">
-                ${code}
-              </div>
-            </div>
-            <p style="font-size: 14px; color: #6b7280;">This code is valid for 30 minutes.</p>
-            <p style="font-size: 14px; color: #4b5563; margin-top: 30px;">Warm regards,<br><strong>The BritBooks Team</strong></p>
-            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 40px 0;" />
-            <p style="font-size: 12px; text-align: center; color: #9ca3af;">&copy; ${new Date().getFullYear()} BritBooks. All rights reserved.</p>
+  const html = `
+    <div style="font-family: Arial, sans-serif; background: #f8f9fa; padding: 40px 0;">
+      <div style="max-width: 580px; margin: auto; background: #ffffff; border-radius: 12px; padding: 40px;">
+        <div style="text-align: center; margin-bottom: 30px;">
+          <img src="https://britbooksfrontend-production.up.railway.app/logobrit.png" alt="BritBooks Logo" style="height: 50px;" />
+        </div>
+        <h2 style="text-align: center; color: #1f2937;">Verify Your Email</h2>
+        <p>Hello <strong>${user.fullName}</strong>,</p>
+        <p>Your verification code is:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <div style="display: inline-block; background: #eef2ff; color: #4338ca; font-size: 28px; font-weight: 600; padding: 16px 32px; border-radius: 10px; letter-spacing: 6px;">
+            ${code}
           </div>
         </div>
-      `,
-    };
+        <p>This code is valid for 30 minutes.</p>
+        <p style="font-size: 12px; text-align: center; color: #9ca3af;">&copy; ${new Date().getFullYear()} BritBooks</p>
+      </div>
+    </div>
+  `;
 
-    await transporter.sendMail(mailOptions);
-    console.log(`📨 Modern verification email sent to ${user.email}`);
-    return { success: true };
-  } catch (err) {
-    console.error("❌ Error sending modern email:", err);
-    return { success: false, error: err.message };
-  }
+  return await sendEmail({
+    to: user.email,
+    subject: "Your BritBooks Verification Code",
+    html,
+  });
 };
 
 
