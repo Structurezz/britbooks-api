@@ -1,4 +1,5 @@
 import * as OrderService from '../services/orderService.js';
+import {Order }from "../models/Order.js";
 
 export async function createOrder(req, res) {
   try {
@@ -105,33 +106,45 @@ export async function getOrdersByUserId(req, res) {
     const { userId: targetUserId } = req.params;
     const { page = 1, limit = 20, ...filters } = req.query;
     const requesterId = req.user?.id;
-    const role = req.user?.role || 'user';
+    const role = req.user?.role || "user";
 
     if (!requesterId) {
-      return res.status(401).json({ success: false, message: 'Unauthorized' });
+      return res.status(401).json({ success: false, message: "Unauthorized" });
     }
 
-    // Normalize to string for safe comparison
-    if (String(requesterId) !== String(targetUserId) && role !== 'admin') {
-      console.log('Forbidden access attempt:', {
-        requesterId,
-        targetUserId,
-        role,
-      });
-      return res.status(403).json({ success: false, message: 'Forbidden' });
+    // Prevent users from fetching other people's orders unless admin
+    if (String(requesterId) !== String(targetUserId) && role !== "admin") {
+      console.log("Forbidden access attempt:", { requesterId, targetUserId, role });
+      return res.status(403).json({ success: false, message: "Forbidden" });
     }
 
-    const orders = await OrderService.getOrders({
-      userId: targetUserId,
-      role,
-      filters,
-      page: parseInt(page, 10),
-      limit: parseInt(limit, 10),
+    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+
+    const query = { user: targetUserId, ...filters };
+
+    const orders = await Order.find(query)
+    .populate([
+      { path: "user", select: "fullName email" }, 
+      { path: "items.listing", select: "title author price img" }, 
+    ])
+    
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit, 10));
+
+    const total = await Order.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      orders,
+      pagination: {
+        total,
+        page: parseInt(page, 10),
+        pages: Math.ceil(total / limit),
+      },
     });
-
-    res.status(200).json({ success: true, orders });
   } catch (error) {
-    console.error('Get orders by userId failed:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
+    console.error("Get orders by userId failed:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 }
