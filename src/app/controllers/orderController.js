@@ -51,16 +51,37 @@ export async function getOrders(req, res) {
 export async function getOrderDetails(req, res) {
   try {
     const { id } = req.params;
-    const order = await OrderService.getOrderDetails(id);
+
+    // Fetch the order and populate only the fields that exist
+    const order = await Order.findById(id)
+      .populate([
+        { path: "items.listing", select: "title author price" }, // populate listing (book) info
+      ])
+      .lean();
 
     if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found.' });
+      return res.status(404).json({ success: false, message: "Order not found." });
     }
 
-    res.status(200).json({ success: true, order });
+    // Map items to include book title instead of just ID
+    const itemsWithTitles = order.items.map((item) => ({
+      quantity: item.quantity,
+      priceAtPurchase: item.priceAtPurchase,
+      title: item.listing?.title || "Unknown Book",
+      author: item.listing?.author || "Unknown Author",
+    }));
+
+    // Return order with mapped items
+    res.status(200).json({
+      success: true,
+      order: {
+        ...order,
+        items: itemsWithTitles,
+      },
+    });
   } catch (error) {
-    console.error('Get order details failed:', error);
-    res.status(500).json({ success: false, message: 'Internal server error' });
+    console.error("Get order details failed:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
   }
 }
 
