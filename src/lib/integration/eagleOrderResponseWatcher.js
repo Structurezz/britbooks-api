@@ -9,24 +9,34 @@ const processedFolder = path.resolve('./src/ftp-root/staging/processed/orders');
 
 // Watcher setup
 export const startEagleResponseWatcher = () => {
-  const watcher = chokidar.watch(path.join(watchFolder, 'eagle_orders_response_*.csv'), {
+  // Ensure processed folder exists
+  fs.mkdirSync(processedFolder, { recursive: true });
+
+  const watcher = chokidar.watch(path.join(watchFolder, '*.csv'), {
     persistent: true,
     ignoreInitial: false,
   });
 
   watcher.on('add', async (filePath) => {
-    console.log(`📥 New Eagle order response: ${filePath}`);
+    console.log(`📥 New Eagle order response detected: ${filePath}`);
+
     try {
       await parseOrderResponseCSV(filePath);
 
-      // Move to processed
+      // Move to processed folder
       const filename = path.basename(filePath);
       const destPath = path.join(processedFolder, filename);
-      fs.renameSync(filePath, destPath);
 
-      console.log(`📦 Moved ${filename} to processed folder.`);
+      try {
+        fs.renameSync(filePath, destPath);
+        console.log(`📦 Moved ${filename} to processed folder.`);
+      } catch (moveErr) {
+        console.error(`❌ Failed to move file: ${moveErr.message}`);
+      }
     } catch (err) {
       console.error(`❌ Error parsing order response: ${err.message}`);
     }
   });
+
+  console.log(`👀 Watching Eagle order responses in: ${watchFolder}`);
 };

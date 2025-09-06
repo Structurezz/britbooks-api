@@ -7,12 +7,16 @@ const remoteConfig = {
   host: process.env.SFTP_HOST || '168.231.116.174',
   port: process.env.SFTP_PORT || 22,
   username: process.env.SFTP_USER || 'eagle',
-  password: process.env.SFTP_PASS, // or use privateKey
+  password: process.env.SFTP_PASS,
 };
 
 const localBase = path.resolve('./src/ftp-root/staging/incoming');
 
-async function syncSftp() {
+/**
+ * Sync all mapped folders, but only download new CSV files.
+ * Runs once per call (no infinite loop).
+ */
+export async function syncSftp() {
   const client = new SftpClient();
 
   try {
@@ -29,13 +33,18 @@ async function syncSftp() {
     for (const { remote, local } of mappings) {
       fs.mkdirSync(local, { recursive: true });
 
+      let fileList = [];
       try {
-        await client.mkdir(remote, true); // ensure remote dir exists
+        fileList = await client.list(remote);
       } catch (e) {
-        console.warn(`⚠️ Could not ensure remote dir ${remote}: ${e.message}`);
+        console.warn(`⚠️ Could not list remote dir ${remote}: ${e.message}`);
+        continue;
       }
 
-      const fileList = await client.list(remote);
+      if (fileList.length === 0) {
+        console.log(`📭 No files found in ${remote}`);
+        continue;
+      }
 
       for (const file of fileList) {
         if (file.name.endsWith('.csv')) {
@@ -47,12 +56,11 @@ async function syncSftp() {
             await client.fastGet(remotePath, localPath);
 
             try {
-              await client.delete(remotePath); // remove remote after download
+              await client.delete(remotePath); // remove after download
               console.log(`🗑️ Deleted remote file: ${remotePath}`);
               console.log(`📂 File ready for processing: ${localPath}`);
-              // 👆 At this point, your existing FTP chokidar watchers will detect the new file
             } catch (err) {
-              console.error(`❌ Error handling ${file.name}:`, err.message);
+              console.error(`❌ Error deleting ${file.name}:`, err.message);
             }
           }
         }
@@ -66,8 +74,11 @@ async function syncSftp() {
   }
 }
 
-export function startSftpSync() {
-  console.log('🚨 Starting SFTP sync loop...');
+/**
+ * Public trigger: run once on demand
+ */
+export function startSftpSync(intervalMs = 60 * 1000) {
+  console.log(`👀 Starting SFTP watcher (every ${intervalMs / 1000}s)...`);
   syncSftp(); // run immediately
-  setInterval(syncSftp, 60 * 1000); // every 1 min
+  setInterval(syncSftp, intervalMs); // run on schedule
 }

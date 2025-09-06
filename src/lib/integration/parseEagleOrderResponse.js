@@ -1,9 +1,7 @@
 import fs from 'fs';
-import path from 'path';
 import { parse } from 'csv-parse';
 import { Order } from '../../app/models/Order.js';
 import { MarketplaceListing } from '../../app/models/MarketPlace.js';
-import { INVENTORY_DIR } from '../constants/paths.js';
 import { logSyncError } from './logSyncError.js';
 
 export async function parseOrderResponseCSV(filePath) {
@@ -13,8 +11,7 @@ export async function parseOrderResponseCSV(filePath) {
     console.log(`🚀 Starting to parse Eagle order response CSV: ${filePath}`);
 
     fs.createReadStream(filePath)
-    .pipe(parse({ headers: true }))
-
+      .pipe(parse({ columns: true, trim: true })) // ✅ use `columns` instead of `headers`
       .on('error', (error) => {
         console.error(`❌ CSV Parse Error: ${error.message}`);
         reject(error);
@@ -41,14 +38,12 @@ export async function parseOrderResponseCSV(filePath) {
             const listing = await MarketplaceListing.findOne({ sku });
             if (!listing) {
               console.warn(`⚠️ Listing not found for SKU: ${sku}`);
-
               await logSyncError({
                 context: 'OrderResponseParsing',
                 order_id,
                 sku,
                 reason: 'Listing not found for SKU',
               });
-
               continue;
             }
             console.log(`✅ Found listing: ${listing._id} with quantity: ${listing.quantity}`);
@@ -71,18 +66,7 @@ export async function parseOrderResponseCSV(filePath) {
           }
         }
 
-        // Move file to processed dir
-        const processedDir = path.join(INVENTORY_DIR, 'processed');
-        fs.mkdirSync(processedDir, { recursive: true });
-        const destPath = path.join(processedDir, path.basename(filePath));
-
-        try {
-          fs.renameSync(filePath, destPath);
-          console.log(`✅ Moved processed file to: ${destPath}`);
-        } catch (err) {
-          console.error(`❌ Failed to move file to processed dir: ${err.message}`);
-        }
-
+        // ✅ No file moving here
         resolve();
       });
   });
