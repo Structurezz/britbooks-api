@@ -210,4 +210,37 @@ export const assignAdminType = async (req, res) => {
     }
   };
   
+  export const saveUserAddress = async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const address = req.body;
   
+      if (!userId) {
+        return res.status(400).json({ success: false, message: "userId is required" });
+      }
+  
+      const requiredFields = ["fullName", "phoneNumber", "addressLine1", "city", "country"];
+      for (const field of requiredFields) {
+        if (!address[field]) {
+          return res.status(400).json({ success: false, message: `${field} is required` });
+        }
+      }
+  
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({ success: false, message: "User not found" });
+      }
+  
+      user.addresses.push(address);
+      await user.save();
+  
+      res.status(201).json({
+        success: true,
+        message: "Address saved successfully",
+        addresses: user.addresses,
+      });
+    } catch (error) {
+      console.error("Error saving address:", error);
+      res.status(500).json({ success: false, message: "Server error" });
+    }
+  };
