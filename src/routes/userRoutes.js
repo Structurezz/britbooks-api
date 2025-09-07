@@ -17,6 +17,8 @@ router.post('/verify-closure/:userId', verifyTokenMiddleware,authMiddleware, use
 router.post('/cancel-closure/:userId', verifyTokenMiddleware, authMiddleware, userController.handleCancelAccountClosureRequest); 
 
 router.post('/:userId/address',  userController.saveUserAddress);
+router.get('/:userId/address',  userController.getAddressesByUserId);
+
 
 
 

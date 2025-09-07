@@ -244,3 +244,30 @@ export const assignAdminType = async (req, res) => {
       res.status(500).json({ success: false, message: "Server error" });
     }
   };
+
+  export const getAddressesByUserId = async (req, res) => {
+    try {
+      const { userId } = req.params;
+  
+      // Find user by ID and only return addresses field
+      const user = await User.findById(userId).select('addresses');
+  
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+  
+      res.status(200).json({
+        success: true,
+        addresses: user.addresses || []
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: 'Server error',
+        error: error.message
+      });
+    }
+  };
