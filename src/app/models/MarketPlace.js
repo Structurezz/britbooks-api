@@ -17,6 +17,7 @@ const inventorySubSchema = new Schema(
 const marketplaceListingSchema = new Schema(
   {
     seller: { type: Types.ObjectId, ref: 'User' },
+    sku: { type: String, trim: true, unique: true },
     isbn: { type: String, trim: true },
     title: { type: String, required: true, trim: true },
     author: { type: String, required: true, trim: true },

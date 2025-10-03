@@ -1,6 +1,34 @@
 import * as OrderService from '../services/orderService.js';
 import {Order }from "../models/Order.js";
 
+const TRACKING_STEPS = [
+  { key: "pending", label: "Ordered", location: "Order placed online" },
+  { key: "processing", label: "Processing", location: "Warehouse" },
+  { key: "confirmed", label: "Dispatched", location: "Sorting Facility" },
+  { key: "in_transit", label: "In Transit", location: "En route to delivery hub" },
+  { key: "out_for_delivery", label: "Out for Delivery", location: "Local Delivery Hub" },
+  { key: "completed", label: "Delivered", location: "Delivered to address" },
+];
+
+// Helper to build tracking based on current order status
+function buildTracking(order) {
+  const status = order.status.toLowerCase();
+  const orderDate = new Date(order.createdAt);
+
+  return TRACKING_STEPS.map((step, index) => {
+    const stepIndex = TRACKING_STEPS.findIndex((s) => s.key === status);
+
+    return {
+      status: step.label,
+      location: step.location,
+      completed: index <= stepIndex,
+      date: index <= stepIndex
+        ? new Date(orderDate.getTime() + index * 60 * 1000).toISOString()
+        : null,
+    };
+  });
+}
+
 export async function createOrder(req, res) {
   try {
     const { items, shippingAddress, billingAddress, paymentMethod } = req.body;
@@ -52,18 +80,14 @@ export async function getOrderDetails(req, res) {
   try {
     const { id } = req.params;
 
-    // Fetch the order and populate only the fields that exist
     const order = await Order.findById(id)
-      .populate([
-        { path: "items.listing", select: "title author price" }, // populate listing (book) info
-      ])
+      .populate([{ path: "items.listing", select: "title author price" }])
       .lean();
 
     if (!order) {
       return res.status(404).json({ success: false, message: "Order not found." });
     }
 
-    // Map items to include book title instead of just ID
     const itemsWithTitles = order.items.map((item) => ({
       quantity: item.quantity,
       priceAtPurchase: item.priceAtPurchase,
@@ -71,12 +95,12 @@ export async function getOrderDetails(req, res) {
       author: item.listing?.author || "Unknown Author",
     }));
 
-    // Return order with mapped items
     res.status(200).json({
       success: true,
       order: {
         ...order,
         items: itemsWithTitles,
+        tracking: buildTracking(order), 
       },
     });
   } catch (error) {
