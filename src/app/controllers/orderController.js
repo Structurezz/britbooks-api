@@ -2,27 +2,29 @@ import * as OrderService from '../services/orderService.js';
 import {Order }from "../models/Order.js";
 
 const TRACKING_STEPS = [
-  { key: "pending", label: "Ordered", location: "Order placed online" },
+  { key: "ordered", label: "Ordered", location: "Order placed online" },
   { key: "processing", label: "Processing", location: "Warehouse" },
-  { key: "confirmed", label: "Dispatched", location: "Sorting Facility" },
+  { key: "dispatched", label: "Dispatched", location: "Sorting Facility" },
   { key: "in_transit", label: "In Transit", location: "En route to delivery hub" },
   { key: "out_for_delivery", label: "Out for Delivery", location: "Local Delivery Hub" },
-  { key: "completed", label: "Delivered", location: "Delivered to address" },
+  { key: "delivered", label: "Delivered", location: "Delivered to address" },
 ];
 
-// Helper to build tracking based on current order status
 function buildTracking(order) {
-  const status = order.status.toLowerCase();
+  const status = order.status?.toLowerCase() || "ordered";
   const orderDate = new Date(order.createdAt);
 
+  // Find where the order is in the flow
+  const stepIndex = TRACKING_STEPS.findIndex((s) => s.key === status);
+
   return TRACKING_STEPS.map((step, index) => {
-    const stepIndex = TRACKING_STEPS.findIndex((s) => s.key === status);
+    const isCompleted = stepIndex >= index; // ✅ everything before or equal to current step is completed
 
     return {
       status: step.label,
       location: step.location,
-      completed: index <= stepIndex,
-      date: index <= stepIndex
+      completed: isCompleted,
+      date: isCompleted
         ? new Date(orderDate.getTime() + index * 60 * 1000).toISOString()
         : null,
     };

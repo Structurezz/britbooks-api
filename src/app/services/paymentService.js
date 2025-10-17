@@ -9,6 +9,8 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import {Order} from '../models/Order.js';
 import {MarketplaceListing} from '../models/MarketPlace.js';
+import { sendOrderToSFTP } from '../../lib/integration/sendOrderToSFTP.js';
+
 dotenv.config();
 
 
@@ -24,32 +26,41 @@ export const createPaymentIntentForOrder = async ({
   subtotal,
   shippingFee,
   total,
-  currency = 'gbp',
+  currency = "gbp",
   token,
 }) => {
-  const amountInCents = Math.round(total * 100);
+  // --- 1. Validation ---
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+    throw new Error("Invalid or missing userId");
+  }
 
-  if (amountInCents < 50) throw new Error('Total must be at least £0.50');
-  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) throw new Error('Invalid or missing userId');
-  if (!token || typeof token !== 'string') throw new Error('Missing or invalid Stripe token');
+  const amountInCents = Math.round(total * 100);
+  if (amountInCents < 50) {
+    throw new Error("Total must be at least £0.50");
+  }
+
+  if (!token || typeof token !== "string") {
+    throw new Error("Missing or invalid Stripe token");
+  }
 
   const user = await User.findById(userId);
   if (!user) throw new Error(`User not found for userId: ${userId}`);
 
-  // Format items before usage in DB
-  const listingTitles = items.map(item => item.title);
-
+  // --- 2. Resolve Listings ---
+  const listingTitles = items.map((item) => item.title);
   const listings = await MarketplaceListing.find({
     title: { $in: listingTitles },
   });
-  
+
   if (listings.length !== items.length) {
-    const missing = listingTitles.filter(t => !listings.some(l => l.title === t));
-    throw new Error(`Missing listings for items: ${missing.join(', ')}`);
+    const missing = listingTitles.filter(
+      (t) => !listings.some((l) => l.title === t)
+    );
+    throw new Error(`Missing listings for items: ${missing.join(", ")}`);
   }
-  
-  const formattedItems = items.map(item => {
-    const matchedListing = listings.find(l => l.title === item.title);
+
+  const formattedItems = items.map((item) => {
+    const matchedListing = listings.find((l) => l.title === item.title);
     return {
       listing: matchedListing._id,
       quantity: item.quantity || 1,
@@ -57,24 +68,22 @@ export const createPaymentIntentForOrder = async ({
       currency: currency.toUpperCase(),
     };
   });
-  
-  
-  
-  // Format shipping address
+
+  // --- 3. Normalize Shipping Address ---
   const formattedShippingAddress = {
     fullName: shippingAddress.name,
     phoneNumber: shippingAddress.phoneNumber,
     addressLine1: shippingAddress.line1,
-    addressLine2: shippingAddress.line2 || '',
+    addressLine2: shippingAddress.line2 || "",
     city: shippingAddress.city,
-    state: shippingAddress.state || '',
+    state: shippingAddress.state || "",
     postalCode: shippingAddress.postalCode,
     country: shippingAddress.country,
   };
 
-  // 1. Create payment method
+  // --- 4. Create Stripe Payment Method ---
   const paymentMethod = await stripe.paymentMethods.create({
-    type: 'card',
+    type: "card",
     card: { token },
     billing_details: {
       name: shippingAddress.name,
@@ -82,20 +91,19 @@ export const createPaymentIntentForOrder = async ({
     },
   });
 
-  // 2. Create and confirm PaymentIntent
+  // --- 5. Create + Confirm Stripe PaymentIntent ---
   const paymentIntent = await stripe.paymentIntents.create({
     amount: amountInCents,
     currency,
     confirm: true,
-    capture_method: 'automatic',
+    capture_method: "automatic",
     payment_method: paymentMethod.id,
-    payment_method_types: ['card'],
+    payment_method_types: ["card"],
     receipt_email: email,
     metadata: {
       userId,
-      paymentType: 'order'
+      paymentType: "order",
     },
-    
     shipping: {
       name: shippingAddress.name,
       address: {
@@ -109,17 +117,15 @@ export const createPaymentIntentForOrder = async ({
 
   const paymentIntentId = paymentIntent.id;
 
-  // 3. Try to fetch the receipt
+  // --- 6. Extract Receipt URL ---
   let charge = paymentIntent.charges?.data?.[0];
-  let receiptUrl = charge?.receipt_url;
+  let receiptUrl = charge?.receipt_url || null;
 
-  if (!charge || !receiptUrl) {
-    console.warn('⚠️ Initial charge missing. Retrying from Stripe...');
+  if (!receiptUrl) {
+    // Retry after short delay if Stripe hasn’t finalized yet
     await new Promise((res) => setTimeout(res, 1500));
-
     const latestIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
     const fallbackCharge = latestIntent.charges?.data?.[0];
-
     if (fallbackCharge?.id) {
       const fullCharge = await stripe.charges.retrieve(fallbackCharge.id);
       receiptUrl = fullCharge?.receipt_url || null;
@@ -127,58 +133,67 @@ export const createPaymentIntentForOrder = async ({
     }
   }
 
-  const finalStatus = receiptUrl ? 'succeeded' : 'pending';
+  const finalStatus = receiptUrl ? "succeeded" : "pending";
 
-  // 4. Save payment to DB
+  // --- 7. Save Payment Record ---
   await Payment.create({
     userId: user._id,
-    email,
     amount: total,
     currency,
     reference: paymentIntentId,
     status: finalStatus,
-    type: 'order-payment',
-    shippingAddress: formattedShippingAddress,
-    items: formattedItems,
-    receiptUrl,
     paymentIntentId,
+    receiptUrl,
+    type: "order-payment",
+    email,
+    items: formattedItems,
+    shippingAddress: formattedShippingAddress,
   });
 
-  // 5. Create the Order
+  const paymentStatus =
+  paymentIntent.status === "succeeded"
+    ? "paid"
+    : paymentIntent.status === "requires_action"
+    ? "pending"
+    : "unpaid";
+
+  // --- 8. Create Order ---
   const newOrder = await Order.create({
     user: user._id,
     items: formattedItems,
     shippingAddress: formattedShippingAddress,
-    total,
     subtotal,
     shippingFee,
-    paymentIntentId,
-    email,
-    status: finalStatus,
+    total,
     currency,
+    email,
+    status: "ordered",
+    paymentIntentId,
     payment: {
-      status: finalStatus === 'succeeded' ? 'paid' : 'unpaid',
-      method: 'card',
+      status: paymentStatus,
+      method: "card",
       transactionId: paymentIntentId,
-      paidAt: new Date(),
+      paidAt: paymentStatus === "paid" ? new Date() : null,
     },
   });
 
-  // 6. Send confirmation email
-  await sendTransferSuccessfulEmail({
-    user,
-    amount: total,
-    transactionId: newOrder._id.toString(),
-    type: 'transfer',
-  });
+  // --- 9. Send Email ---
+  if (paymentStatus === "paid") {
+    await sendTransferSuccessfulEmail({
+      user,
+      amount: total,
+      transactionId: newOrder._id.toString(),
+      type: "transfer",
+    });
+  }
 
-  // 7. Return data
+  // --- 10. Return Result ---
   return {
     clientSecret: paymentIntent.client_secret,
     reference: paymentIntentId,
     orderId: newOrder._id.toString(),
     status: paymentIntent.status,
-    requiresAction: paymentIntent.status === 'requires_action',
+    requiresAction: paymentIntent.status === "requires_action",
     nextAction: paymentIntent.next_action || null,
     receiptUrl,
   };
@@ -261,6 +276,7 @@ export const processSuccessfulPayment = async (reference, receiptUrl) => {
     const existingTransaction = wallet.transactions.find(
       txn => txn.transactionId === reference
     );
+
     if (existingTransaction) {
       const order = await Order.findOne({ paymentIntentId: reference });
       return {
@@ -304,8 +320,31 @@ export const processSuccessfulPayment = async (reference, receiptUrl) => {
       { new: true }
     );
 
-    const order = await Order.findOne({ paymentIntentId: reference });
+    const order = await Order.findOneAndUpdate(
+      { paymentIntentId: reference },
+      {
+        $set: {
+          "payment.status": "paid",
+          "payment.paidAt": new Date(),
+          status: "confirmed"
+        }
+      },
+      { new: true }
+    );
 
+    if (order) {
+      console.log(`📦 Found confirmed order: ${order._id}`);
+      try {
+        await sendOrderToSFTP(order);
+        console.log(`✅ Order ${order._id} successfully exported to SFTP`);
+      } catch (err) {
+        console.error(`❌ Failed to export order ${order._id} to SFTP:`, err.message);
+      }
+    } else {
+      console.warn(`⚠️ No order found for paymentIntentId: ${reference}`);
+    }
+
+    // ✅ Send wallet email
     try {
       await sendWalletTopUpEmail(
         user,
@@ -317,9 +356,11 @@ export const processSuccessfulPayment = async (reference, receiptUrl) => {
       console.error('❌ Failed to send wallet top-up email:', emailErr.message);
     }
 
+    console.log(`✅ Payment ${reference} fully processed.`);
+
     return {
       success: true,
-      message: `Payment successful and ${walletType} wallet credited!`,
+      message: `Payment successful, ${walletType} wallet credited, and order marked as paid!`,
       walletBalance: updatedWallet.balance,
       transactions: updatedWallet.transactions,
       orderId: order?._id?.toString() || null
@@ -329,6 +370,7 @@ export const processSuccessfulPayment = async (reference, receiptUrl) => {
     return { success: false, error: error.message };
   }
 };
+
 
 
 

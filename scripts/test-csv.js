@@ -1,93 +1,95 @@
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import { parseOrderResponseCSV } from "../src/lib/integration/parseEagleOrderResponse.js";
+import path from "path";
+import { createObjectCsvWriter } from "csv-writer";
 import { Order } from "../src/app/models/Order.js";
-
+// Load environment variables
 dotenv.config();
+const MONGODB_URI = process.env.MONGODB_URI;
 
-const mongoUri = process.env.MONGODB_URI;
-if (!mongoUri) {
-  throw new Error("❌ MONGODB_URI not found in .env file");
+if (!MONGODB_URI) {
+  console.error("Please set MONGO_URI in your .env file");
+  process.exit(1);
 }
 
-// Business-level flow (Order.status)
-const ORDER_STATUS_FLOW = [
-  "ordered",
-  "processing",
-  "dispatched",
-  "in_transit",
-  "out_for_delivery",
-  "delivered", // stop here
-];
+// Connect to MongoDB
+mongoose.connect(MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
 
-// Logistics-level flow (Order.shipping.status)
-const SHIPPING_STATUS_FLOW = [
-  "pending",
-  "processing",
-  "dispatched",
-  "in_transit",
-  "out_for_delivery",
-  "delivered",
-  "returned",
-];
-
-async function run() {
+/**
+ * Mark the last 20 orders as paid and export to CSV
+ */
+async function markLast20OrdersAsPaidAndExportCSV() {
   try {
-    await mongoose.connect(mongoUri);
-    console.log("✅ Connected to MongoDB");
+    // Fetch the last 20 orders that are currently unpaid
+    const last20Orders = await Order.find({ "payment.status": { $ne: "paid" } })
+      .sort({ placedAt: -1 })
+      .limit(20);
 
-    const filePath =
-      "/Users/mac/britbook-api/src/ftp-root/staging/incoming/orders/order_68daaf3d82d486b6a91f3849.csv";
-
-    // Step 1: Parse the Eagle CSV normally
-    await parseOrderResponseCSV(filePath);
-    console.log("📄 CSV parsed and orders updated");
-
-    // Step 2: Walk each parsed order through the full status flow
-    const orders = await Order.find({});
-    console.log(`🔍 Found ${orders.length} orders to walk through status flow`);
-
-    for (const order of orders) {
-      // Ensure shipping object always exists
-      if (!order.shipping) {
-        order.shipping = {};
-      }
-
-      const currentIndex = ORDER_STATUS_FLOW.indexOf(order.status);
-      const startIndex = currentIndex >= 0 ? currentIndex : 0;
-
-      for (let i = startIndex; i < ORDER_STATUS_FLOW.length; i++) {
-        const nextStatus = ORDER_STATUS_FLOW[i];
-
-        // Update order.status (business lifecycle)
-        order.status = nextStatus;
-
-        // Keep shipping.status in sync (logistics lifecycle)
-        if (SHIPPING_STATUS_FLOW.includes(nextStatus)) {
-          order.shipping.status = nextStatus;
-        }
-
-        // Set timestamps for key events
-        if (nextStatus === "dispatched") {
-          order.shipping.shippedAt = new Date();
-        }
-        if (nextStatus === "delivered") {
-          order.shipping.deliveredAt = new Date();
-        }
-
-        await order.save();
-        console.log(`✅ Order ${order._id} → ${nextStatus}`);
-      }
+    if (!last20Orders.length) {
+      console.log("No unpaid orders found to mark as paid.");
+      return;
     }
 
-    console.log("🎉 Status flow complete (stopped at delivered)");
+    const now = new Date();
+
+    // Update orders to paid and prepare CSV data
+    const csvData = [];
+    for (const order of last20Orders) {
+      order.payment.status = "paid";
+      order.payment.paidAt = now;
+
+      order.history.push({
+        status: "ordered",
+        updatedAt: now,
+        note: "Marked as paid automatically",
+      });
+
+      await order.save();
+
+      // Prepare CSV row
+      csvData.push({
+        orderId: order._id.toString(),
+        status: "Paid",
+        total: order.total,
+        currency: order.currency,
+        placedAt: order.placedAt.toISOString(),
+        shippingMethod: order.shipping?.method || "standard",
+        trackingNumber: order.shipping?.trackingNumber || "",
+        items: order.items
+          .map(
+            (item) =>
+              `${item.listing.toString()} (Qty: ${item.quantity}, Price: ${item.priceAtPurchase})`
+          )
+          .join("; "),
+      });
+    }
+
+    // Write CSV
+    const csvWriter = createObjectCsvWriter({
+      path: path.join(process.cwd(), "last_20_paid_orders.csv"),
+      header: [
+        { id: "orderId", title: "Order ID" },
+        { id: "status", title: "Status" },
+        { id: "total", title: "Total" },
+        { id: "currency", title: "Currency" },
+        { id: "placedAt", title: "Placed At" },
+        { id: "shippingMethod", title: "Shipping Method" },
+        { id: "trackingNumber", title: "Tracking Number" },
+        { id: "items", title: "Items" },
+      ],
+    });
+
+    await csvWriter.writeRecords(csvData);
+    console.log("CSV file successfully created: last_20_paid_orders.csv");
   } catch (err) {
-    console.error("❌ Script failed:", err);
+    console.error("Error processing orders:", err);
   } finally {
-    await mongoose.disconnect();
-    console.log("🔌 Disconnected from MongoDB");
-    process.exit(0);
+    mongoose.disconnect();
   }
 }
 
-run();
+// Run the function
+markLast20OrdersAsPaidAndExportCSV();
