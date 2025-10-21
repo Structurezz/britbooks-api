@@ -1,7 +1,11 @@
-// src/lib/config/sftp/sftpClient.js
+
 import SftpClient from 'ssh2-sftp-client';
 import fs from 'fs';
 import path from 'path';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
 
 const remoteConfig = {
   host: process.env.SFTP_HOST || '168.231.116.174',

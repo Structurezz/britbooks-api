@@ -3,8 +3,11 @@ import dotenv from "dotenv";
 import path from "path";
 import { createObjectCsvWriter } from "csv-writer";
 import { Order } from "../src/app/models/Order.js";
-// Load environment variables
+import { MarketplaceListing } from "../src/app/models/MarketPlace.js";
+import { uploadToSftp } from "../src/lib/config/sftp/sftpClient.js";
+
 dotenv.config();
+
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
@@ -13,83 +16,98 @@ if (!MONGODB_URI) {
 }
 
 // Connect to MongoDB
-mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
+mongoose.connect(MONGODB_URI);
 
 /**
- * Mark the last 20 orders as paid and export to CSV
+ * Create order from last 20 Marketplace listings and upload CSV to SFTP
  */
-async function markLast20OrdersAsPaidAndExportCSV() {
+async function createOrderFromRecentProductsAndUpload() {
   try {
-    // Fetch the last 20 orders that are currently unpaid
-    const last20Orders = await Order.find({ "payment.status": { $ne: "paid" } })
-      .sort({ placedAt: -1 })
-      .limit(20);
+    const userId = "6888f7e9e9896d7bd5cc4727";
+    const listings = await MarketplaceListing.find({})
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
 
-    if (!last20Orders.length) {
-      console.log("No unpaid orders found to mark as paid.");
+    if (!listings.length) {
+      console.log("No Marketplace listings found.");
       return;
     }
 
-    const now = new Date();
+    // Build items array
+    const items = listings.map((listing) => ({
+      listing: listing._id,
+      quantity: 1,
+      priceAtPurchase: listing.price || 0,
+      currency: listing.currency || "GBP",
+    }));
 
-    // Update orders to paid and prepare CSV data
-    const csvData = [];
-    for (const order of last20Orders) {
-      order.payment.status = "paid";
-      order.payment.paidAt = now;
+    const total = items.reduce((sum, item) => sum + item.priceAtPurchase, 0);
 
-      order.history.push({
-        status: "ordered",
-        updatedAt: now,
-        note: "Marked as paid automatically",
-      });
+    // Create order
+    const order = await Order.create({
+      user: userId,
+      type: "order",
+      status: "ordered",
+      items,
+      total,
+      currency: "GBP",
+      shipping: { method: "standard", status: "ordered" },
+      payment: { status: "paid", method: "wallet", paidAt: new Date() },
+      shippingAddress: {
+        fullName: "Michael Orizu",
+        phoneNumber: "2347089224074",
+        addressLine1: "12 Example Street",
+        city: "London",
+        country: "United Kingdom",
+      },
+      billingAddress: {
+        fullName: "Michael Orizu",
+        phoneNumber: "2347089224074",
+        addressLine1: "12 Example Street",
+        city: "London",
+        country: "United Kingdom",
+      },
+      history: [{ status: "ordered", note: "Auto order from recent listings" }],
+      placedAt: new Date(),
+    });
 
-      await order.save();
+    // Build CSV data
+    const csvData = listings.map((listing) => ({
+      orderId: order._id.toString(),
+      productId: listing._id.toString(),
+      title: listing.title || "Untitled",
+      price: listing.price,
+      currency: listing.currency || "GBP",
+      createdAt: listing.createdAt?.toISOString() || "",
+    }));
 
-      // Prepare CSV row
-      csvData.push({
-        orderId: order._id.toString(),
-        status: "Paid",
-        total: order.total,
-        currency: order.currency,
-        placedAt: order.placedAt.toISOString(),
-        shippingMethod: order.shipping?.method || "standard",
-        trackingNumber: order.shipping?.trackingNumber || "",
-        items: order.items
-          .map(
-            (item) =>
-              `${item.listing.toString()} (Qty: ${item.quantity}, Price: ${item.priceAtPurchase})`
-          )
-          .join("; "),
-      });
-    }
+    const csvPath = path.join(process.cwd(), "recent_20_products_order.csv");
 
-    // Write CSV
     const csvWriter = createObjectCsvWriter({
-      path: path.join(process.cwd(), "last_20_paid_orders.csv"),
+      path: csvPath,
       header: [
         { id: "orderId", title: "Order ID" },
-        { id: "status", title: "Status" },
-        { id: "total", title: "Total" },
+        { id: "productId", title: "Product ID" },
+        { id: "title", title: "Product Title" },
+        { id: "price", title: "Price" },
         { id: "currency", title: "Currency" },
-        { id: "placedAt", title: "Placed At" },
-        { id: "shippingMethod", title: "Shipping Method" },
-        { id: "trackingNumber", title: "Tracking Number" },
-        { id: "items", title: "Items" },
+        { id: "createdAt", title: "Created At" },
       ],
     });
 
     await csvWriter.writeRecords(csvData);
-    console.log("CSV file successfully created: last_20_paid_orders.csv");
+    console.log("✅ CSV file created:", csvPath);
+
+    // Upload to SFTP
+    await uploadToSftp(csvPath, "/uploads/orders/outgoing");
+
+    console.log("🎉 Order created and CSV uploaded to SFTP!");
   } catch (err) {
-    console.error("Error processing orders:", err);
+    console.error("❌ Error:", err);
   } finally {
-    mongoose.disconnect();
+    await mongoose.disconnect();
   }
 }
 
-// Run the function
-markLast20OrdersAsPaidAndExportCSV();
+createOrderFromRecentProductsAndUpload();
