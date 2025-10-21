@@ -62,8 +62,7 @@ export async function syncSftp() {
             await client.fastGet(remotePath, localPath);
 
             try {
-              await client.delete(remotePath); // remove after download
-              console.log(`🗑️ Deleted remote file: ${remotePath}`);
+ 
               console.log(`📂 File ready for processing: ${localPath}`);
             } catch (err) {
               console.error(`❌ Error deleting ${file.name}:`, err.message);
@@ -110,12 +109,12 @@ export async function uploadToSftp(localFilePath, remoteDir = '/uploads/orders/o
 
     // Check if remoteDir exists; create it if not
     try {
-      const dirList = await client.list(remoteDir);
-      console.log(`📂 Remote directory "${remoteDir}" exists with ${dirList.length} files.`);
-    } catch (e) {
+      await client.list(remoteDir);
+    } catch {
       console.warn(`⚠️ Remote directory not found (${remoteDir}), creating...`);
       await client.mkdir(remoteDir, true);
     }
+
 
     // Upload file
     await client.put(localFilePath, remotePath);

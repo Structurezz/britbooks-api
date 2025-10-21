@@ -177,6 +177,8 @@ export const createPaymentIntentForOrder = async ({
     },
   });
 
+
+  
   // --- 9. Send Email ---
   if (paymentStatus === "paid") {
     await sendTransferSuccessfulEmail({
@@ -334,15 +336,27 @@ export const processSuccessfulPayment = async (reference, receiptUrl) => {
 
     if (order) {
       console.log(`📦 Found confirmed order: ${order._id}`);
+    
       try {
-        await sendOrderToSFTP(order);
-        console.log(`✅ Order ${order._id} successfully exported to SFTP`);
+        if (mongoose.connection.readyState !== 1) {
+          console.log("🔄 Reconnecting to MongoDB before SFTP upload...");
+          await mongoose.connect(process.env.MONGODB_URI);
+        }
+    
+        const result = await sendOrderToSFTP(order);
+        console.log(`✅ Order ${order._id} successfully exported to SFTP at ${result.path}`);
       } catch (err) {
         console.error(`❌ Failed to export order ${order._id} to SFTP:`, err.message);
       }
+    
+    
     } else {
       console.warn(`⚠️ No order found for paymentIntentId: ${reference}`);
     }
+
+    console.log("🧩 About to call sendOrderToSFTP...");
+console.log("🔍 Type of sendOrderToSFTP:", typeof sendOrderToSFTP);
+
 
     // ✅ Send wallet email
     try {

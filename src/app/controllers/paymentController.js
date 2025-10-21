@@ -20,6 +20,8 @@ import { generateTransferReceiptPdf } from '../../lib/utils/generateTrasactionId
 import { sendWithdrawalNotificationEmail } from '../services/nexcessService.js';
 import Stripe from 'stripe';
 import {Order} from '../models/Order.js';
+import { sendOrderToSFTP } from '../../lib/integration/sendOrderToSFTP.js';
+
 
 
 const stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -155,6 +157,22 @@ export const handlePaymentSuccess = async (req, res) => {
   
       // ✅ Lookup the associated order using exact paymentIntentId stored
       const order = await Order.findOne({ paymentIntentId: payment.paymentIntentId });
+
+      if (order) {
+        console.log('🧩 Order being uploaded:', {
+          id: order._id,
+          items: order.items?.length,
+          hasPaymentIntent: !!order.paymentIntentId
+        });
+      
+        try {
+          const sftpResult = await sendOrderToSFTP(order);
+          console.log(`✅ Order ${order._id} sent to SFTP:`, sftpResult.path);
+        } catch (err) {
+          console.error(`❌ SFTP upload failed for order ${order._id}:`, err);
+        }
+      }
+      
   
       return res.status(200).json({
         success: true,
